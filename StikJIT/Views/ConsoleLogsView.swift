@@ -91,21 +91,10 @@ struct ConsoleLogsView: View {
                     }
                 }
             }
-            .overlay {
-                if showingCustomAlert {
-                    Color.black.opacity(0.4)
-                        .edgesIgnoringSafeArea(.all)
-                        .overlay(
-                            CustomErrorView(
-                                title: alertTitle,
-                                message: alertMessage,
-                                onDismiss: { showingCustomAlert = false },
-                                showButton: true,
-                                primaryButtonText: "OK",
-                                messageType: isError ? .error : .success
-                            )
-                        )
-                }
+            .alert(alertTitle, isPresented: $showingCustomAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(alertMessage)
             }
             .confirmationDialog("Syslog Speed", isPresented: $showingSyslogSpeedSelector) {
                 ForEach(syslogIntervalOptions, id: \.self) { option in

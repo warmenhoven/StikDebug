@@ -151,32 +151,6 @@ struct ProfileView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 30)
                 }
-                if alert {
-                    CustomErrorView(title: alertTitle,
-                                    message: alertMsg,
-                                    onDismiss: { alert = false },
-                                    messageType: alertSuccess ? .success : .error)
-                }
-                
-                if confirmRemove {
-                    CustomErrorView(
-                        title: "Confirm Removal",
-                        message: "Remove profile for \(removeTargetName) (UUID: \(removeTargetUUID))?\n**Apps associated with this profile may become unavailable.**",
-                        onDismiss: { confirmRemove = false },
-                        showButton: true,
-                        primaryButtonText: "Remove",
-                        secondaryButtonText: "Cancel",
-                        onPrimaryButtonTap: {
-                            Task { await removeProfile(uuid: removeTargetUUID) }
-                        },
-                        onSecondaryButtonTap: {
-                            // Just dismiss
-                        },
-                        showSecondaryButton: true,
-                        messageType: .info
-                    )
-                }
-                
             }
             .navigationTitle("App Expiry")
             .toolbar {
@@ -219,6 +193,19 @@ struct ProfileView: View {
             }
         }
         .preferredColorScheme(preferredScheme)
+        .alert(alertTitle, isPresented: $alert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMsg)
+        }
+        .alert("Confirm Removal", isPresented: $confirmRemove) {
+            Button("Remove", role: .destructive) {
+                Task { await removeProfile(uuid: removeTargetUUID) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Remove profile for \(removeTargetName) (UUID: \(removeTargetUUID))?\nApps associated with this profile may become unavailable.")
+        }
     }
     
     // MARK: - UI Sections

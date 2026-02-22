@@ -225,12 +225,6 @@ struct DeviceInfoView: View {
                         .padding(16)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                if alert {
-                    CustomErrorView(title: alertTitle,
-                                    message: alertMsg,
-                                    onDismiss: { alert = false },
-                                    messageType: alertSuccess ? .success : .error)
-                }
                 if justCopied {
                     VStack {
                         Spacer()
@@ -243,6 +237,11 @@ struct DeviceInfoView: View {
                     }
                     .animation(.easeInOut(duration: 0.25), value: justCopied)
                 }
+            }
+            .alert(alertTitle, isPresented: $alert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(alertMsg)
             }
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {

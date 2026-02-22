@@ -150,14 +150,6 @@ struct ScriptListView: View {
                     .padding(16)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            if alertVisible {
-                CustomErrorView(
-                    title: alertTitle,
-                    message: alertMessage,
-                    onDismiss: { alertVisible = false },
-                    messageType: alertIsSuccess ? .success : .error
-                )
-            }
             if justCopied {
                 VStack {
                     Spacer()
@@ -170,6 +162,11 @@ struct ScriptListView: View {
                 }
                 .animation(.easeInOut(duration: 0.25), value: justCopied)
             }
+        }
+        .alert(alertTitle, isPresented: $alertVisible) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
         }
     }
 
