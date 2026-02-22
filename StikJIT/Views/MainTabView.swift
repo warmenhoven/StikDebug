@@ -56,9 +56,6 @@ struct MainTabView: View {
             TabDescriptor(id: "scripts", title: "Scripts", systemImage: "scroll") { AnyView(ScriptListView()) },
             TabDescriptor(id: "deviceinfo", title: "Device Info", systemImage: "iphone.and.arrow.forward") { AnyView(DeviceInfoView()) }
         ]
-        if FeatureFlags.isMiniToolsEnabled {
-            tabs.append(TabDescriptor(id: "tools", title: "Mini Tools", systemImage: "wrench.and.screwdriver.fill") { AnyView(MiniToolListView()) })
-        }
         if FeatureFlags.showBetaTabs {
             tabs.append(TabDescriptor(id: "profiles", title: "App Expiry", systemImage: "calendar.badge.clock") { AnyView(ProfileView()) })
             tabs.append(TabDescriptor(id: "processes", title: "Processes", systemImage: "rectangle.stack.person.crop") { AnyView(ProcessInspectorView()) })

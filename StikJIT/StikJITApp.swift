@@ -348,19 +348,11 @@ struct HeartbeatApp: App {
                             }
                         }
                     }
-                    .overlay(
-                        ZStack {
-                            if showVersionAlert {
-                                CustomErrorView(
-                                    title: versionAlertTitle,
-                                    message: versionAlertMessage,
-                                    onDismiss: { showVersionAlert = false },
-                                    showButton: true,
-                                    primaryButtonText: "OK"
-                                )
-                            }
-                        }
-                    )
+                    .alert(versionAlertTitle, isPresented: $showVersionAlert) {
+                        Button("OK") { showVersionAlert = false }
+                    } message: {
+                        Text(versionAlertMessage)
+                    }
             }
             .themeExpansionManager(themeExpansionManager)
             // Apply global tint to all SwiftUI views in this window
@@ -614,68 +606,35 @@ func checkDeviceConnection(callback: @escaping (Bool, String?) -> Void) {
 
 public func showAlert(title: String, message: String, showOk: Bool, showTryAgain: Bool = false, primaryButtonText: String? = nil, messageType: MessageType = .error, completion: ((Bool) -> Void)? = nil) {
     DispatchQueue.main.async {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = scene.windows.first?.rootViewController else {
             return
         }
-        let rootViewController = scene.windows.first?.rootViewController
+        
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        
         if showTryAgain {
-            let customErrorView = CustomErrorView(
-                title: title,
-                message: message,
-                onDismiss: {
-                    rootViewController?.presentedViewController?.dismiss(animated: true)
-                    completion?(false)
-                },
-                showButton: true,
-                primaryButtonText: primaryButtonText ?? "Try Again",
-                onPrimaryButtonTap: {
-                    completion?(true)
-                },
-                messageType: messageType
-            )
-            let hostingController = UIHostingController(rootView: customErrorView)
-            hostingController.modalPresentationStyle = .overFullScreen
-            hostingController.modalTransitionStyle = .crossDissolve
-            hostingController.view.backgroundColor = .clear
-            rootViewController?.present(hostingController, animated: true)
+            alert.addAction(UIAlertAction(title: primaryButtonText ?? "Try Again", style: .default) { _ in
+                completion?(true)
+            })
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                completion?(false)
+            })
         } else if showOk {
-            let customErrorView = CustomErrorView(
-                title: title,
-                message: message,
-                onDismiss: {
-                    rootViewController?.presentedViewController?.dismiss(animated: true)
-                    completion?(true)
-                },
-                showButton: true,
-                primaryButtonText: primaryButtonText ?? "OK",
-                onPrimaryButtonTap: {
-                    rootViewController?.presentedViewController?.dismiss(animated: true)
-                    completion?(true)
-                },
-                messageType: messageType
-            )
-            let hostingController = UIHostingController(rootView: customErrorView)
-            hostingController.modalPresentationStyle = .overFullScreen
-            hostingController.modalTransitionStyle = .crossDissolve
-            hostingController.view.backgroundColor = .clear
-            rootViewController?.present(hostingController, animated: true)
+            alert.addAction(UIAlertAction(title: primaryButtonText ?? "OK", style: .default) { _ in
+                completion?(true)
+            })
         } else {
-            let customErrorView = CustomErrorView(
-                title: title,
-                message: message,
-                onDismiss: {
-                    rootViewController?.presentedViewController?.dismiss(animated: true)
-                    completion?(false)
-                },
-                showButton: false,
-                messageType: messageType
-            )
-            let hostingController = UIHostingController(rootView: customErrorView)
-            hostingController.modalPresentationStyle = .overFullScreen
-            hostingController.modalTransitionStyle = .crossDissolve
-            hostingController.view.backgroundColor = .clear
-            rootViewController?.present(hostingController, animated: true)
+             alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                completion?(true)
+            })
         }
+        
+        var topController = rootViewController
+        while let presented = topController.presentedViewController {
+            topController = presented
+        }
+        topController.present(alert, animated: true)
     }
 }
 

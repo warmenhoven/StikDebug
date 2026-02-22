@@ -11,4 +11,3 @@
 #include "idevice/location_simulation.h"
 #include "idevice/profiles.h"
 #include "idevice/ipa_installer.h"
-#include "MiniToolSupport/JSSupport/JSSupport.h"
