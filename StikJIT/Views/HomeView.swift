@@ -106,6 +106,15 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Greeting
+                    HStack {
+                        Text("\(timeOfDayGreeting), \(sanitizedUsername)")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 4)
+                    
                     // Status Section
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Status")
@@ -121,31 +130,6 @@ struct HomeView: View {
                                 heartbeatStatusBadge
                             }
                             .padding()
-                            
-                            Divider()
-                                .padding(.leading)
-                            
-                            if !heartbeatOK {
-                                Button {
-                                    startHeartbeatInBackground()
-                                } label: {
-                                    Text("Start Heartbeat")
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                                        .padding(.vertical, 12)
-                                        .foregroundColor(accentColor)
-                                }
-                            } else {
-                                Button {
-                                    pubHeartBeat = false
-                                    heartbeatOK = false
-                                    startHeartbeatInBackground()
-                                } label: {
-                                    Text("Restart Heartbeat")
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                                        .padding(.vertical, 12)
-                                        .foregroundColor(.orange)
-                                }
-                            }
                         }
                         .background(Color(UIColor.secondarySystemGroupedBackground))
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -179,22 +163,6 @@ struct HomeView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
                             .disabled(isProcessing || isValidatingPairingFile)
-                            
-                            if pairingFileExists && enableAdvancedOptions && primaryActionTitle == "Connect by App" {
-                                Button { showPIDSheet = true } label: {
-                                    HStack {
-                                        Label("Connect by PID", systemImage: "number.circle")
-                                            .font(.body.weight(.medium))
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding()
-                                    .background(Color(UIColor.secondarySystemGroupedBackground))
-                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                }
-                            }
                             
                             if pairingFileExists {
                                  Button {
@@ -230,7 +198,7 @@ struct HomeView: View {
                 .padding()
             }
             .background(Color(UIColor.systemGroupedBackground))
-            .navigationTitle("\(timeOfDayGreeting), \(sanitizedUsername)")
+            .navigationTitle("Home")
             .preferredColorScheme(preferredScheme)
             .overlay {
                 if isImportingFile {
@@ -574,7 +542,7 @@ struct HomeView: View {
             if isValidatingPairingFile { return "Validating…" }
             if !pairingFileExists { return pairingFilePresentOnDisk ? "Import New Pairing File" : "Import Pairing File" }
             if !ddiMounted { return "Mount Developer Disk Image" }
-            return "Connect by App"
+            return "Enable JIT"
         }
 
         private var primaryActionIcon: String {

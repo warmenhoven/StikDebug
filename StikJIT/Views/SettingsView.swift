@@ -106,21 +106,6 @@ struct SettingsView: View {
                     .padding(.vertical, 8)
                 }
 
-                // 2) Appearance
-                Section("Appearance") {
-                    HStack(spacing: 14) {
-                        RoundedRectangle(cornerRadius: 8).fill(accentColor).frame(width: 28, height: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(currentThemeName).font(.subheadline.weight(.semibold))
-                            Text("Accent · \(accentColorDescription)").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Button { showingDisplayView = true } label: {
-                        Label("Customize Display", systemImage: "paintbrush")
-                    }
-                    .foregroundStyle(.primary)
-                }
-
                 // 3) Navigation
                 Section("Navigation") {
                     NavigationLink {
