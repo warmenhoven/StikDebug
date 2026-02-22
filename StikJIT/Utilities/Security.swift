@@ -6,8 +6,8 @@
 //
 import Security
 
-
 typealias SecTaskRef = OpaquePointer
+
 @_silgen_name("SecTaskCopyValueForEntitlement")
 func SecTaskCopyValueForEntitlement(
     _ task: SecTaskRef,
@@ -21,15 +21,7 @@ func SecTaskCreateFromSelf(
 ) -> SecTaskRef?
 
 func checkAppEntitlement(_ ent: String) -> Bool {
-    guard let task = SecTaskCreateFromSelf(nil) else {
-        print("Failed to create SecTask")
-        return false
-    }
-    
-    guard let entitlements = SecTaskCopyValueForEntitlement(task, ent as NSString, nil) else {
-        print("Failed to get entitlements")
-        return false
-    }
-    
-    return entitlements.boolValue != nil && entitlements.boolValue
+    guard let task = SecTaskCreateFromSelf(nil) else { return false }
+    guard let value = SecTaskCopyValueForEntitlement(task, ent as NSString, nil) else { return false }
+    return value.boolValue != nil && value.boolValue
 }

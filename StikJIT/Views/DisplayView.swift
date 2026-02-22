@@ -7,10 +7,10 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-// MARK: - Accent Color Picker (Glassy style)
+// MARK: - Accent Color Picker
 struct AccentColorPicker: View {
     @Binding var selectedColor: Color
-    
+
     let colors: [Color] = [
         .blue,
         .init(hex: "#7FFFD4")!,
@@ -21,50 +21,27 @@ struct AccentColorPicker: View {
         .white,
         .black
     ]
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Accent Color")
-                .font(.headline)
-                .foregroundColor(.primary)
-            
-            LazyVGrid(columns: Array(repeating: .init(.flexible(), spacing: 12), count: 9), spacing: 12) {
-                ForEach(colors, id: \.self) { color in
-                    Circle()
-                        .fill(color)
-                        .frame(width: 28, height: 28)
-                        .overlay(
-                            Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
-                        )
-                        .overlay(
-                            Circle().stroke(selectedColor == color ? Color.primary : .clear, lineWidth: 2)
-                        )
-                        .onTapGesture {
-                            selectedColor = color
-                        }
-                }
-                
-                ColorPicker("", selection: $selectedColor)
-                    .labelsHidden()
+        LazyVGrid(columns: Array(repeating: .init(.flexible(), spacing: 12), count: 9), spacing: 12) {
+            ForEach(colors, id: \.self) { color in
+                Circle()
+                    .fill(color)
                     .frame(width: 28, height: 28)
                     .overlay(
-                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        Circle().stroke(selectedColor == color ? Color.primary : .clear, lineWidth: 2)
                     )
-                    .clipShape(Circle())
+                    .onTapGesture {
+                        selectedColor = color
+                    }
             }
-            .frame(maxWidth: .infinity)
+
+            ColorPicker("", selection: $selectedColor)
+                .labelsHidden()
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 4)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -122,53 +99,77 @@ struct DisplayView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        usernameCard
-                        if hasThemeExpansion {
-                            accentCard
-                            themeCard
-                            customThemesSection
-                        } else if shouldShowThemeExpansionUpsell {
-                            // Accent preview remains above
-                            accentPreview
-                            
-                            // Built-in + Custom themes previews with paywall centered on top
-                            ZStack(alignment: .center) {
-                                VStack(spacing: 20) {
-                                    themePreview
-                                    customThemesPreview
-                                }
-                                .zIndex(0)
-                                themeExpansionUpsellCard
-                                    .frame(maxWidth: .infinity) // match other cards’ width
-                                    .zIndex(1)
-                            }
-                        }
-                        jitOptionsCard
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 30)
+            Form {
+                Section("Profile") {
+                    usernameRow
                 }
-                
-                if justSaved {
-                    VStack {
-                        Spacer()
-                        Text("Saved")
-                            .font(.footnote.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
-                            .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 3)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                            .padding(.bottom, 30)
+
+                if hasThemeExpansion {
+                    Section("Accent Color") {
+                        AccentColorPicker(selectedColor: $selectedAccentColor)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                        HStack(spacing: 12) {
+                            Button {
+                                if let hex = selectedAccentColor.toHex() {
+                                    customAccentColorHex = hex
+                                } else {
+                                    customAccentColorHex = ""
+                                }
+                                showSavedToast()
+                            } label: {
+                                Label("Save", systemImage: "checkmark.circle.fill")
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .fontWeight(.semibold)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(selectedAccentColor)
+
+                            Button {
+                                customAccentColorHex = ""
+                                selectedAccentColor = .blue
+                                showSavedToast()
+                            } label: {
+                                Label("Reset", systemImage: "arrow.uturn.backward.circle")
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
-                    .animation(.easeInOut(duration: 0.25), value: justSaved)
+
+                    Section("Themes") {
+                        selectedThemePreview
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        builtInThemesGrid(interactive: true, locked: false)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    }
+
+                    customThemesSection
+
+                } else if shouldShowThemeExpansionUpsell {
+                    Section("Accent Color") {
+                        accentPreview
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    }
+
+                    Section("Themes") {
+                        ZStack(alignment: .center) {
+                            VStack(spacing: 12) {
+                                builtInThemesGrid(interactive: false, locked: true)
+                            }
+                            .zIndex(0)
+                            themeExpansionUpsellCard
+                                .zIndex(1)
+                        }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    }
+                }
+
+                Section("App List") {
+                    Toggle("Load App Icons", isOn: $loadAppIconsOnJIT)
+                    Text("Disabling this will hide app icons in the app list and may improve performance.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Display")
@@ -200,6 +201,20 @@ struct DisplayView: View {
                     appThemeRaw = AppTheme.system.rawValue
                     applyThemePreferences()
                 }
+            }
+        }
+        .overlay {
+            if justSaved {
+                VStack {
+                    Spacer()
+                    Text("Saved")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.bottom, 30)
+                }
+                .animation(.easeInOut(duration: 0.25), value: justSaved)
             }
         }
         .tint(tintColor)
@@ -235,93 +250,20 @@ struct DisplayView: View {
         }
     }
     
-    // MARK: - Cards
-    
-    private var usernameCard: some View {
-        appGlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Username")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-            
-            HStack {
-                TextField("Username", text: $username)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .padding(.vertical, 8)
-                
-                if !username.isEmpty {
-                    Button(action: {
-                        username = ""
-                        showSavedToast()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(Color(UIColor.tertiaryLabel))
-                            .font(.system(size: 16))
-                    }
+    // MARK: - Rows
+
+    private var usernameRow: some View {
+        HStack {
+            TextField("Username", text: $username)
+            if !username.isEmpty {
+                Button {
+                    username = ""
+                    showSavedToast()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Color(UIColor.tertiaryLabel))
                 }
-            }
-            .padding(.horizontal, 12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-            )
-            }
-        }
-    }
-    
-    private var accentCard: some View {
-        appGlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Accent")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-
-                AccentColorPicker(selectedColor: $selectedAccentColor)
-
-                HStack(spacing: 12) {
-                    Button {
-                        if let hex = selectedAccentColor.toHex() {
-                            customAccentColorHex = hex
-                        } else {
-                            customAccentColorHex = ""
-                        }
-                        showSavedToast()
-                    } label: {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                            Text("Save")
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(selectedAccentColor)
-                        )
-                        .foregroundColor(selectedAccentColor.contrastText())
-                    }
-
-                    Button {
-                        customAccentColorHex = ""
-                        selectedAccentColor = .blue
-                        showSavedToast()
-                    } label: {
-                        HStack {
-                            Image(systemName: "arrow.uturn.backward.circle")
-                            Text("Reset")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color(UIColor.tertiarySystemBackground))
-                        )
-                    }
-                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -329,105 +271,84 @@ struct DisplayView: View {
     private var themeExpansionUpsellCard: some View {
         let isAppStore = themeExpansion?.isAppStoreBuild ?? true
         let productLoaded = themeExpansion?.themeExpansionProduct != nil
-        return appGlassCard {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("StikDebug Theme Expansion")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+        return VStack(alignment: .leading, spacing: 14) {
+            Text("StikDebug Theme Expansion")
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
 
-                if !isAppStore {
-                    Text("Theme Expansion is coming soon on this store.")
-                        .font(.body)
+            if !isAppStore {
+                Text("Theme Expansion is coming soon on this store.")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                Text("For now, you can continue using the default theme.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Unlock custom accent colors and dynamic backgrounds with the Theme Expansion.")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+
+                if let price = themeExpansion?.themeExpansionProduct?.displayPrice {
+                    Text("One-time purchase • \(price)")
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
-                    Text("For now, you can continue using the default theme.")
+                }
+
+                if productLoaded, let manager = themeExpansion {
+                    Button {
+                        Task { await manager.purchaseThemeExpansion() }
+                    } label: {
+                        HStack {
+                            if manager.isProcessing { ProgressView().progressViewStyle(.circular) }
+                            Text(manager.isProcessing ? "Purchasing…" : "Unlock Theme Expansion")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(manager.isProcessing)
+                } else if let manager = themeExpansion {
+                    Button {
+                        Task { await manager.refreshEntitlements() }
+                    } label: {
+                        HStack {
+                            if manager.isProcessing { ProgressView().progressViewStyle(.circular) }
+                            Text(manager.isProcessing ? "Contacting App Store…" : "Try Again")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(manager.isProcessing)
+                }
+
+                if let manager = themeExpansion {
+                    Button {
+                        Task { await manager.restorePurchases() }
+                    } label: {
+                        Text("Restore Purchase")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(manager.isProcessing)
+                }
+
+                if let manager = themeExpansion, !productLoaded, manager.lastError == nil {
+                    Text(manager.isProcessing ? "Contacting the App Store…" : "Waiting for App Store information.")
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                } else {
-                    Text("Unlock custom accent colors and dynamic backgrounds with the Theme Expansion.")
-                        .font(.body)
-                        .foregroundColor(.secondary)
+                }
 
-                    if let price = themeExpansion?.themeExpansionProduct?.displayPrice {
-                        Text("One-time purchase • \(price)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-
-                    if productLoaded, let manager = themeExpansion {
-                        Button {
-                            Task { await manager.purchaseThemeExpansion() }
-                        } label: {
-                            HStack {
-                                if manager.isProcessing {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                }
-                                Text(manager.isProcessing ? "Purchasing…" : "Unlock Theme Expansion")
-                                    .fontWeight(.semibold)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Color.blue)
-                            )
-                            .foregroundColor(Color.blue.contrastText())
-                        }
-                        .disabled(manager.isProcessing)
-                    } else if let manager = themeExpansion {
-                        Button {
-                            Task { await manager.refreshEntitlements() }
-                        } label: {
-                            HStack {
-                                if manager.isProcessing {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                }
-                                Text(manager.isProcessing ? "Contacting App Store…" : "Try Again")
-                                    .fontWeight(.semibold)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(Color.blue.opacity(0.4), lineWidth: 1)
-                            )
-                        }
-                        .disabled(manager.isProcessing)
-                    }
-
-                    if let manager = themeExpansion {
-                        Button {
-                            Task { await manager.restorePurchases() }
-                        } label: {
-                            Text("Restore Purchase")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(Color.blue.opacity(0.4), lineWidth: 1)
-                                )
-                        }
-                        .disabled(manager.isProcessing)
-                    }
-
-                    if let manager = themeExpansion, !productLoaded, manager.lastError == nil {
-                        Text(manager.isProcessing ? "Contacting the App Store…" : "Waiting for App Store information.")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    }
-
-                    if let error = themeExpansion?.lastError {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundColor(.red)
-                    }
+                if let error = themeExpansion?.lastError {
+                    Text(error).font(.footnote).foregroundColor(.red)
                 }
             }
         }
+        .padding(20)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .task {
             if let manager = themeExpansion,
                manager.isAppStoreBuild,
@@ -439,40 +360,6 @@ struct DisplayView: View {
         }
     }
     
-    private var jitOptionsCard: some View {
-        appGlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("App List")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Load App Icons", isOn: $loadAppIconsOnJIT)
-                        .tint(accentColor)
-                    
-                    Text("Disabling this will hide app icons in the app list and may improve performance, while also giving it a more minimalistic look.")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-    }
-    
-    private var themeCard: some View {
-        appGlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Themes")
-                    .font(.title3.weight(.semibold))
-                    .foregroundColor(.primary)
-
-                selectedThemePreview
-                Divider()
-                builtInThemesGrid(interactive: hasThemeExpansion, locked: !hasThemeExpansion)
-            }
-        }
-    }
-
     private var selectedThemePreview: some View {
         ThemePreviewCard(style: backgroundStyle,
                          title: selectedThemeName,
@@ -482,17 +369,6 @@ struct DisplayView: View {
                          allowsInteraction: false,
                          height: 160)
             .accessibilityHidden(true)
-    }
-
-    private var themeLockedPreviewCard: some View {
-        appGlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Themes")
-                    .font(.title3.weight(.semibold))
-                    .foregroundColor(.primary)
-                builtInThemesGrid(interactive: false, locked: true)
-            }
-        }
     }
 
     private var gridColumns: [GridItem] {
@@ -520,67 +396,42 @@ struct DisplayView: View {
     @ViewBuilder
     private var customThemesSection: some View {
         if hasThemeExpansion, let manager = themeExpansion {
-            appGlassCard {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("Custom Themes")
-                            .font(.title3.weight(.semibold))
-                            .foregroundColor(.primary)
-                        Spacer()
-                        Button {
-                            showingCreateCustomTheme = true
-                        } label: {
-                            Label("New", systemImage: "plus.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                    }
-
-                    if manager.customThemes.isEmpty {
-                        VStack(spacing: 8) {
-                            Text("Create your own themes with custom colors and motion.")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.leading)
-                            Button(action: { showingCreateCustomTheme = true }) {
-                                Text("Create a Custom Theme")
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.vertical, 10)
-                                    .frame(maxWidth: .infinity)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(Color.blue)
-                                    )
-                                    .foregroundColor(Color.blue.contrastText())
+            Section("Custom Themes") {
+                Button { showingCreateCustomTheme = true } label: {
+                    Label("New Theme", systemImage: "plus.circle.fill")
+                }
+                if manager.customThemes.isEmpty {
+                    Text("Create your own themes with custom colors and motion.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    LazyVGrid(columns: gridColumns, spacing: 12) {
+                        ForEach(manager.customThemes, id: \.id) { theme in
+                            let identifier = manager.customThemeIdentifier(for: theme)
+                            let isSelected = selectedCustomTheme?.id == theme.id
+                            ThemeOptionTile(style: manager.backgroundStyle(for: identifier),
+                                            title: theme.name,
+                                            isSelected: isSelected,
+                                            isLocked: false,
+                                            interactive: true) {
+                                appThemeRaw = identifier
+                                applyThemePreferences()
+                                showSavedToast()
                             }
-                        }
-                    } else {
-                        LazyVGrid(columns: gridColumns, spacing: 12) {
-                            ForEach(manager.customThemes, id: \.id) { theme in
-                                let identifier = manager.customThemeIdentifier(for: theme)
-                                let isSelected = selectedCustomTheme?.id == theme.id
-                                ThemeOptionTile(style: manager.backgroundStyle(for: identifier),
-                                                title: theme.name,
-                                                isSelected: isSelected,
-                                                isLocked: false,
-                                                interactive: true) {
-                                    appThemeRaw = identifier
-                                    applyThemePreferences()
-                                    showSavedToast()
-                                }
-                                .contextMenu {
-                                    Button("Edit") { editingCustomTheme = theme }
-                                    Button("Delete", role: .destructive) {
-                                        manager.delete(customTheme: theme)
-                                        let id = manager.customThemeIdentifier(for: theme)
-                                        if appThemeRaw == id {
-                                            appThemeRaw = AppTheme.system.rawValue
-                                            applyThemePreferences()
-                                        }
+                            .contextMenu {
+                                Button("Edit") { editingCustomTheme = theme }
+                                Button("Delete", role: .destructive) {
+                                    manager.delete(customTheme: theme)
+                                    let id = manager.customThemeIdentifier(for: theme)
+                                    if appThemeRaw == id {
+                                        appThemeRaw = AppTheme.system.rawValue
+                                        applyThemePreferences()
                                     }
                                 }
                             }
                         }
                     }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
             }
         }
@@ -645,47 +496,9 @@ struct DisplayView: View {
             .allowsHitTesting(false)
     }
 
-    // Use static theme grid inside the locked preview to avoid animation cost
-    private var accentPreview: some View { lockedPreview(accentCard) }
-    private var themePreview: some View { lockedPreview(themeLockedPreviewCard) }
-    
-    private var customThemesPreview: some View {
-        lockedPreview(customThemesPreviewCard)
-    }
-    
-    private var customThemesPreviewCard: some View {
-        appGlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text("Custom Themes")
-                        .font(.title3.weight(.semibold))
-                        .foregroundColor(.primary)
-                    Spacer()
-                    Label("New", systemImage: "plus.circle.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .opacity(0.6)
-                }
-
-                LazyVGrid(columns: gridColumns, spacing: 12) {
-                    ThemeOptionTile(style: .customGradient(colors: [Color(hex: "#3E4C7C") ?? .indigo,
-                                                                    Color(hex: "#1C1F3A") ?? .blue]),
-                                    title: "Midnight Fade",
-                                    isSelected: false,
-                                    isLocked: true,
-                                    interactive: false,
-                                    action: {})
-
-                    ThemeOptionTile(style: .customGradient(colors: [Color(hex: "#00F5A0") ?? .green,
-                                                                    Color(hex: "#00D9F5") ?? .cyan,
-                                                                    Color(hex: "#C96BFF") ?? .purple]),
-                                    title: "Neon Drift",
-                                    isSelected: false,
-                                    isLocked: true,
-                                    interactive: false,
-                                    action: {})
-                }
-            }
-        }
+    // Locked preview of accent picker shown in upsell
+    private var accentPreview: some View {
+        lockedPreview(AccentColorPicker(selectedColor: .constant(.blue)))
     }
 }
 
@@ -923,7 +736,7 @@ private final class ThemePreviewUIKitView: UIView {
     }
 
     private func applyGradient(colors: [Color]) {
-        gradientLayer.colors = colors.nonEmptyOrFallback().map { UIColor($0).cgColor }
+        gradientLayer.colors = colors.ensureMinimumCount().map { UIColor($0).cgColor }
     }
 
     private func applyAnimatedGradient(colors: [Color], speed: Double, reduceMotion: Bool) {
@@ -995,12 +808,6 @@ private final class ThemePreviewUIKitView: UIView {
 }
 
 private extension Array where Element == Color {
-    func nonEmptyOrFallback() -> [Color] {
-        if isEmpty { return [Color.blue, Color.purple] }
-        if count == 1 { return [self[0], self[0].opacity(0.7)] }
-        return self
-    }
-
     func previewIdentityKey() -> String {
         map { $0.previewIdentityKey }.joined(separator: ",")
     }
@@ -1080,7 +887,7 @@ private struct ThemePreviewThumbnail: View {
     }
 
     private var placeholderGradient: some View {
-        LinearGradient(colors: style.thumbnailColors(for: colorScheme).nonEmptyOrFallback(),
+        LinearGradient(colors: style.thumbnailColors(for: colorScheme).ensureMinimumCount(),
                        startPoint: .topLeading,
                        endPoint: .bottomTrailing)
     }
@@ -1109,7 +916,7 @@ private final class ThemePreviewThumbnailCache {
     }
 
     private func drawThumbnail(style: BackgroundStyle, scheme: ColorScheme) -> UIImage {
-        let colors = style.thumbnailColors(for: scheme).nonEmptyOrFallback()
+        let colors = style.thumbnailColors(for: scheme).ensureMinimumCount()
         let uiColors = colors.map { UIColor($0) }
         let renderer = UIGraphicsImageRenderer(size: renderSize)
         return renderer.image { ctx in

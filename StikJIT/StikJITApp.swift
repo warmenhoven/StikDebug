@@ -112,45 +112,22 @@ struct WelcomeSheetView: View {
     }
 }
 
-// MARK: - AccentColor Environment Key (leave available but unused)
-
-struct AccentColorKey: EnvironmentKey {
-    static let defaultValue: Color = .accentColor
-}
-
-extension EnvironmentValues {
-    var accentColor: Color {
-        get { self[AccentColorKey.self] }
-        set { self[AccentColorKey.self] = newValue }
-    }
-}
-
-// MARK: - Helper Functions and Globals
-
-let fileManager = FileManager.default
+// MARK: - Helper Functions
 
 func httpGet(_ urlString: String, result: @escaping (String?) -> Void) {
-    if let url = URL(string: urlString) {
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
-            if let error = error {
-                print("Error: \(error.localizedDescription)")
-                result(nil)
-                return
-            }
-            
-            if let data = data, let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 200 {
-                    print("Response: \(httpResponse.statusCode)")
-                    if let dataString = String(data: data, encoding: .utf8) {
-                        result(dataString)
-                    }
-                } else {
-                    print("Received non-200 status code: \(httpResponse.statusCode)")
-                }
-            }
+    guard let url = URL(string: urlString) else { result(nil); return }
+    let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        guard error == nil,
+              let data = data,
+              let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200,
+              let dataString = String(data: data, encoding: .utf8) else {
+            result(nil)
+            return
         }
-        task.resume()
+        result(dataString)
     }
+    task.resume()
 }
 
 func UpdateRetrieval() -> Bool {
@@ -202,19 +179,15 @@ class DNSChecker: ObservableObject {
                 group.notify(queue: .main) {
                     if self.controlIP == nil {
                         self.dnsError = "No internet connection."
-                        print("Control host lookup failed, so no internet connection.")
                     } else if self.appleIP == nil {
                         self.dnsError = "Apple DNS blocked. Your network might be filtering Apple traffic."
-                        print("Control lookup succeeded, but Apple lookup failed: likely blocked.")
                     } else {
                         self.dnsError = nil
-                        print("DNS lookups succeeded: Apple -> \(self.appleIP!), Control -> \(self.controlIP!)")
                     }
                 }
             } else {
                 DispatchQueue.main.async {
                     self.dnsError = nil
-                    print("Not connected to WiFi; continuing without DNS check.")
                 }
             }
         }
@@ -283,9 +256,9 @@ struct HeartbeatApp: App {
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @State private var showWelcomeSheet: Bool = false
-    @State private var show_alert = false
-    @State private var alert_string = ""
-    @State private var alert_title = ""
+    @State private var showVersionAlert = false
+    @State private var versionAlertMessage = ""
+    @State private var versionAlertTitle = ""
     @StateObject private var mount = MountingProgress.shared
     @StateObject private var themeExpansionManager = ThemeExpansionManager()
     @Environment(\.scenePhase) private var scenePhase   // Observe scene lifecycle
@@ -294,9 +267,10 @@ struct HeartbeatApp: App {
     init() {
         registerAdvancedOptionsDefault()
         newVerCheck()
-        let fixMethod = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.fix_init(forOpeningContentTypes:asCopy:)))!
-        let origMethod = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.init(forOpeningContentTypes:asCopy:)))!
-        method_exchangeImplementations(origMethod, fixMethod)
+        if let fixMethod  = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.fix_init(forOpeningContentTypes:asCopy:))),
+           let origMethod = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.init(forOpeningContentTypes:asCopy:))) {
+            method_exchangeImplementations(origMethod, fixMethod)
+        }
         
         // Initialize UIKit tint from stored accent at launch (defaults to blue until entitlements load)
         HeartbeatApp.updateUIKitTint(customHex: customAccentColorHex, hasAccess: false)
@@ -315,16 +289,18 @@ struct HeartbeatApp: App {
     
     func newVerCheck() {
         let currentDate = Calendar.current.startOfDay(for: Date())
-        let VUA = UserDefaults.standard.object(forKey: "VersionUpdateAlert") as? Date ?? Date.distantPast
-        
-        if currentDate > Calendar.current.startOfDay(for: VUA) {
+        let lastVersionAlertDate = UserDefaults.standard.object(forKey: "VersionUpdateAlert") as? Date ?? Date.distantPast
+
+        if currentDate > Calendar.current.startOfDay(for: lastVersionAlertDate) {
             if UpdateRetrieval() {
-                alert_title = "Update Avaliable!"
                 let urlString = "https://raw.githubusercontent.com/0-Blu/StikJIT/refs/heads/main/version.txt"
-                httpGet(urlString) { result in
-                    if result == nil { return }
-                    alert_string = "Update to: version \(result!)!"
-                    show_alert = true
+                httpGet(urlString) { [self] version in
+                    guard let version else { return }
+                    DispatchQueue.main.async {
+                        self.versionAlertTitle = "Update Available!"
+                        self.versionAlertMessage = "Update to version \(version)!"
+                        self.showVersionAlert = true
+                    }
                 }
             }
             UserDefaults.standard.set(currentDate, forKey: "VersionUpdateAlert")
@@ -363,9 +339,9 @@ struct HeartbeatApp: App {
                                     try await downloadFile(from: item.urlString, to: destinationURL)
                                 } catch {
                                     await MainActor.run {
-                                        alert_title = "An Error has Occurred"
-                                        alert_string = "[Download DDI Error]: \(error.localizedDescription)"
-                                        show_alert = true
+                                        versionAlertTitle = "An Error has Occurred"
+                                        versionAlertMessage = "[Download DDI Error]: \(error.localizedDescription)"
+                                        showVersionAlert = true
                                     }
                                     break
                                 }
@@ -374,13 +350,11 @@ struct HeartbeatApp: App {
                     }
                     .overlay(
                         ZStack {
-                            if show_alert {
+                            if showVersionAlert {
                                 CustomErrorView(
-                                    title: alert_title,
-                                    message: alert_string,
-                                    onDismiss: {
-                                        show_alert = false
-                                    },
+                                    title: versionAlertTitle,
+                                    message: versionAlertMessage,
+                                    onDismiss: { showVersionAlert = false },
                                     showButton: true,
                                     primaryButtonText: "OK"
                                 )
@@ -455,7 +429,6 @@ class MountingProgress: ObservableObject {
     
     func progressCallback(progress: size_t, total: size_t, context: UnsafeMutableRawPointer?) {
         let percentage = Double(progress) / Double(total) * 100.0
-        print("Mounting progress: \(percentage)%")
         DispatchQueue.main.async {
             self.mountProgress = percentage
         }
@@ -477,20 +450,18 @@ class MountingProgress: ObservableObject {
                 self.mountingThread = nil
             }
             
-            mountingThread = Thread { [weak self] in
+            let thread = Thread { [weak self] in
                 guard let self = self else { return }
                 let mountResult = mountPersonalDDI(
                     imagePath: URL.documentsDirectory.appendingPathComponent("DDI/Image.dmg").path,
                     trustcachePath: URL.documentsDirectory.appendingPathComponent("DDI/Image.dmg.trustcache").path,
                     manifestPath: URL.documentsDirectory.appendingPathComponent("DDI/BuildManifest.plist").path,
                 )
-                
+
                 DispatchQueue.main.async {
                     if mountResult != 0 {
-                        showAlert(title: "Error", message: "An Error Occured when Mounting the DDI\nError Code: \(mountResult)", showOk: true, showTryAgain: true) { shouldTryAgain in
-                            if shouldTryAgain {
-                                self.mount()
-                            }
+                        showAlert(title: "Error", message: "An Error Occurred when Mounting the DDI\nError Code: \(mountResult)", showOk: true, showTryAgain: true) { shouldTryAgain in
+                            if shouldTryAgain { self.mount() }
                         }
                     } else {
                         self.coolisMounted = true
@@ -499,10 +470,10 @@ class MountingProgress: ObservableObject {
                     self.mountingThread = nil
                 }
             }
-            
-            mountingThread!.qualityOfService = .background
-            mountingThread!.name = "mounting"
-            mountingThread!.start()
+            thread.qualityOfService = .background
+            thread.name = "mounting"
+            thread.start()
+            mountingThread = thread
         }
     }
 }
@@ -511,13 +482,7 @@ func isPairing() -> Bool {
     let pairingpath = URL.documentsDirectory.appendingPathComponent("pairingFile.plist").path
     var pairingFile: IdevicePairingFile?
     let err = idevice_pairing_file_read(pairingpath, &pairingFile)
-    if let err {
-        print("Failed to read pairing file: \(err.pointee.code)")
-        if err.pointee.code == -9 {  // InvalidHostID is -9
-            return false
-        }
-        return false
-    }
+    if err != nil { return false }
     idevice_pairing_file_free(pairingFile)
     return true
 }
@@ -548,7 +513,7 @@ func startHeartbeatInBackground(showErrorUI: Bool = true) {
         }
         do {
             try JITEnableContext.shared.startHeartbeat()
-            print("Heartbeat started successfully")
+            LogManager.shared.addInfoLog("Heartbeat started successfully")
             pubHeartBeat = true
             
             DispatchQueue.main.async {
@@ -561,15 +526,15 @@ func startHeartbeatInBackground(showErrorUI: Bool = true) {
         } catch {
             let err2 = error as NSError
             let code = err2.code
-            print("Error: \(error.localizedDescription) (Code: \(code))")
+            LogManager.shared.addErrorLog("\(error.localizedDescription) (Code: \(code))")
             guard showErrorUI else { return }
             DispatchQueue.main.async {
                 if code == -9 {
                     do {
                         try FileManager.default.removeItem(at: URL.documentsDirectory.appendingPathComponent("pairingFile.plist"))
-                        print("Removed invalid pairing file")
+                        LogManager.shared.addInfoLog("Removed invalid pairing file")
                     } catch {
-                        print("Error removing invalid pairing file: \(error)")
+                        LogManager.shared.addErrorLog("Failed to remove invalid pairing file: \(error.localizedDescription)")
                     }
                     
                     showAlert(

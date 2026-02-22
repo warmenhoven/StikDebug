@@ -9,32 +9,22 @@ import SwiftUI
 
 struct ProcessInspectorView: View {
     @StateObject private var viewModel = ProcessInspectorViewModel()
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @State private var killCandidate: ProcessInfoEntry?
     @State private var killConfirmTask: Task<Void, Never>?
-    
-    private var backgroundStyle: BackgroundStyle {
-        themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle
-    }
-    
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
-                content
-            }
-            .navigationTitle("Process Inspector")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: viewModel.refresh) {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+            content
+                .navigationTitle("Process Inspector")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: viewModel.refresh) {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(viewModel.isRefreshing)
                     }
-                    .disabled(viewModel.isRefreshing)
                 }
-            }
+                .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always))
         }
         .task {
             await viewModel.startAutoRefresh()
@@ -50,7 +40,7 @@ struct ProcessInspectorView: View {
             )
         }
     }
-    
+
     @ViewBuilder
     private var content: some View {
         if let error = viewModel.errorMessage {
@@ -60,66 +50,26 @@ struct ProcessInspectorView: View {
                     .foregroundStyle(.orange)
                 Text(error)
                     .multilineTextAlignment(.center)
-                    .foregroundColor(.primary)
-                Button("Try Again") {
-                    viewModel.refresh()
-                }
-                .buttonStyle(.borderedProminent)
+                    .foregroundStyle(.primary)
+                Button("Try Again") { viewModel.refresh() }
+                    .buttonStyle(.borderedProminent)
             }
             .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView {
-                VStack(spacing: 16) {
-                    statsCard
-                    processesCard
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 30)
-            }
-            .refreshable {
-                viewModel.refresh()
-            }
-            .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always))
-        }
-    }
-}
-
-private extension ProcessInspectorView {
-    var statsCard: some View {
-        MaterialCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Overview")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Total Processes")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("\(viewModel.processes.count)")
-                                .font(.title2.bold())
-                        }
-                        Spacer()
+            List {
+                Section("Overview") {
+                    LabeledContent("Total Processes") {
+                        Text("\(viewModel.processes.count)")
+                            .font(.title2.bold())
                     }
                 }
-            }
-        }
-    }
-    
-    var processesCard: some View {
-        MaterialCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Processes")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                if viewModel.filteredProcesses.isEmpty {
-                    Text("No matching processes.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else {
-                    LazyVStack(spacing: 0) {
+                Section("Processes") {
+                    if viewModel.filteredProcesses.isEmpty {
+                        Text("No matching processes.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
                         ForEach(viewModel.filteredProcesses) { process in
                             ProcessRow(
                                 process: process,
@@ -127,19 +77,17 @@ private extension ProcessInspectorView {
                                 isConfirming: killCandidate?.pid == process.pid,
                                 onKillTap: { handleKillTap(for: $0) }
                             )
-                            .padding(.vertical, 6)
-                            
-                            if process.id != viewModel.filteredProcesses.last?.id {
-                                Divider()
-                                    .background(Color.white.opacity(0.1))
-                            }
                         }
                     }
                 }
             }
+            .listStyle(.insetGrouped)
+            .refreshable { viewModel.refresh() }
         }
     }
-    
+}
+
+private extension ProcessInspectorView {
     func handleKillTap(for process: ProcessInfoEntry) {
         if killCandidate?.pid == process.pid {
             killConfirmTask?.cancel()

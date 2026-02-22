@@ -10,7 +10,7 @@ final class MiniToolRuntime: NSObject, ObservableObject {
     @Published var logs: [String] = []
     @Published var isReady: Bool = false
 
-    var webView: WKWebView?
+    var webView: WKWebView!
     private var context: JSContext?
 
     private var appXHRTasks: [String: URLSessionDataTask] = [:]
@@ -33,12 +33,12 @@ final class MiniToolRuntime: NSObject, ObservableObject {
         configuration.setURLSchemeHandler(leakAvoider, forURLScheme: "app")
         webView = WKWebView(frame: .zero, configuration: configuration)
         controller.add(leakAvoider, name: messageHandlerName)
-        webView!.navigationDelegate = self
-        webView!.isInspectable = true
+        webView.navigationDelegate = self
+        webView.isInspectable = true
     }
 
     deinit {
-        webView!.configuration.userContentController.removeScriptMessageHandler(forName: messageHandlerName)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: messageHandlerName)
     }
 
     func start() {
@@ -61,7 +61,7 @@ final class MiniToolRuntime: NSObject, ObservableObject {
             return
         }
         isReady = false
-        webView!.load(URLRequest(url: URL(string: "app://\(tool.getHostName())")!))
+        webView.load(URLRequest(url: URL(string: "app://\(tool.getHostName())")!))
     }
 
     private func loadBackground() {
@@ -127,7 +127,7 @@ final class MiniToolRuntime: NSObject, ObservableObject {
         }
         DispatchQueue.main.async {
             let script = "window.miniTool && window.miniTool.__receive(\(json))"
-            self.webView!.evaluateJavaScript(script) { _, error in
+            self.webView.evaluateJavaScript(script) { _, error in
                 if let error {
                     self.appendLog("Frontend dispatch error: \(error.localizedDescription)")
                 }
@@ -159,7 +159,7 @@ extension MiniToolRuntime : WKURLSchemeHandler {
         let fileURL = tool.url
             .appendingPathComponent(path).standardizedFileURL
         
-        if fileURL.path().hasPrefix(tool.url.path()) {
+        if !fileURL.path().hasPrefix(tool.url.path()) {
             urlSchemeTask.didFailWithError(NSError(domain: "Path traversal is not allowed.", code: -1))
             return
         }
@@ -172,10 +172,10 @@ extension MiniToolRuntime : WKURLSchemeHandler {
         do {
             let data = try Data(contentsOf: fileURL)
             let mimeType : String
-            if let type = UTType(filenameExtension: fileURL.pathExtension), let mimetype = type.preferredMIMEType  {
+            if let type = UTType(filenameExtension: fileURL.pathExtension), let mimetype = type.preferredMIMEType {
                 mimeType = mimetype
             } else {
-                mimeType = UTType.data.preferredMIMEType!
+                mimeType = "application/octet-stream"
             }
 
             let response = URLResponse(
@@ -593,7 +593,7 @@ private extension MiniToolRuntime {
 
         DispatchQueue.main.async {
             let script = "window.XMLHttpRequest.__receive(\(json))"
-            self.webView!.evaluateJavaScript(script) { _, error in
+            self.webView.evaluateJavaScript(script) { _, error in
                 if let error {
                     self.appendLog("AppXHR deliver error: \(error.localizedDescription)")
                 }

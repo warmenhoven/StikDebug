@@ -23,18 +23,15 @@ func isMounted() -> Bool {
         let result = try JITEnableContext.shared.getMountedDeviceCount()
         return result > 0
     } catch {
-        print("Error while getMountedDeviceCount \(error)")
         return false
     }
 }
 
 func mountPersonalDDI(imagePath: String, trustcachePath: String, manifestPath: String) -> Int {
-    print("Mounting \(imagePath) \(trustcachePath) \(manifestPath)")
-    
     do {
         try JITEnableContext.shared.mountPersonalDDI(withImagePath: imagePath, trustcachePath: trustcachePath, manifestPath: manifestPath)
     } catch {
-        print("Failed to mount ddi: \(error)")
+        LogManager.shared.addErrorLog("Failed to mount DDI: \(error.localizedDescription)")
         return (error as NSError).code
     }
     return 0

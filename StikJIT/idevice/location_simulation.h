@@ -1,12 +1,12 @@
 //
-//  ls.h
+//  location_simulation.h
 //  StikDebug
 //
 //  Created by Stephen on 8/3/25.
 //
 
-#ifndef LS_H
-#define LS_H
+#ifndef LOCATION_SIMULATION_H
+#define LOCATION_SIMULATION_H
 
 #include <stdint.h>
 
@@ -52,4 +52,4 @@ int clear_simulated_location(void);
 }
 #endif
 
-#endif /* LS_H */
+#endif /* LOCATION_SIMULATION_H */

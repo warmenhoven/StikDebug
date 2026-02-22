@@ -1,12 +1,12 @@
 //
-//  something.h
+//  ipa_installer.h
 //  StikDebug
 //
 //  Created by Stephen on 7/29/25.
 //
 
-#ifndef SOMETHING_H
-#define SOMETHING_H
+#ifndef IPA_INSTALLER_H
+#define IPA_INSTALLER_H
 
 #include "idevice.h"
 #include <stdint.h>
@@ -29,4 +29,4 @@ int install_ipa(const char *ip,
                 const char *udid,
                 const char *ipa_path);
 
-#endif /* SOMETHING_H */
+#endif /* IPA_INSTALLER_H */

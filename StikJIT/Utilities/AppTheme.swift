@@ -370,12 +370,6 @@ private struct ParticleFieldBackground: View {
 }
 
 private extension Array where Element == Color {
-    func ensureMinimumCount() -> [Color] {
-        if isEmpty { return [.blue, .purple] }
-        if count == 1 { return [self[0], self[0].opacity(0.6)] }
-        return self
-    }
-
     var identityKey: String {
         map { $0.identityKey }.joined(separator: ",")
     }

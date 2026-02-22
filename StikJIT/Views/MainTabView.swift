@@ -51,20 +51,20 @@ struct MainTabView: View {
 
     private var configurableTabs: [TabDescriptor] {
         var tabs: [TabDescriptor] = [
-            TabDescriptor(id: "home", title: "Home", systemImage: "house") { AnyView(HomeView()) },
-            TabDescriptor(id: "console", title: "Console", systemImage: "terminal") { AnyView(ConsoleLogsView()) },
-            TabDescriptor(id: "scripts", title: "Scripts", systemImage: "scroll") { AnyView(ScriptListView()) },
-            TabDescriptor(id: "deviceinfo", title: "Device Info", systemImage: "iphone.and.arrow.forward") { AnyView(DeviceInfoView()) }
+            TabDescriptor(id: "home", title: "Home", systemImage: "house.fill") { AnyView(HomeView()) },
+            TabDescriptor(id: "console", title: "Console", systemImage: "terminal.fill") { AnyView(ConsoleLogsView()) },
+            TabDescriptor(id: "scripts", title: "Scripts", systemImage: "doc.text.fill") { AnyView(ScriptListView()) },
+            TabDescriptor(id: "deviceinfo", title: "Device Info", systemImage: "info.circle.fill") { AnyView(DeviceInfoView()) }
         ]
         if FeatureFlags.isMiniToolsEnabled {
-            tabs.append(TabDescriptor(id: "tools", title: "Mini Tools", systemImage: "shippingbox.fill") { AnyView(MiniToolListView()) })
+            tabs.append(TabDescriptor(id: "tools", title: "Mini Tools", systemImage: "wrench.and.screwdriver.fill") { AnyView(MiniToolListView()) })
         }
         if FeatureFlags.showBetaTabs {
-            tabs.append(TabDescriptor(id: "profiles", title: "Profiles", systemImage: "magazine.fill") { AnyView(ProfileView()) })
-            tabs.append(TabDescriptor(id: "processes", title: "Processes", systemImage: "rectangle.stack.person.crop") { AnyView(ProcessInspectorView()) })
-            tabs.append(TabDescriptor(id: "devicelibrary", title: "Devices", systemImage: "list.bullet.rectangle") { AnyView(DeviceLibraryView()) })
+            tabs.append(TabDescriptor(id: "profiles", title: "Profiles", systemImage: "lock.doc.fill") { AnyView(ProfileView()) })
+            tabs.append(TabDescriptor(id: "processes", title: "Processes", systemImage: "cpu") { AnyView(ProcessInspectorView()) })
+            tabs.append(TabDescriptor(id: "devicelibrary", title: "Devices", systemImage: "ipad.and.iphone") { AnyView(DeviceLibraryView()) })
             if FeatureFlags.isLocationSpoofingEnabled {
-                tabs.append(TabDescriptor(id: "location", title: "Location", systemImage: "location") { AnyView(LocationSimulationView()) })
+                tabs.append(TabDescriptor(id: "location", title: "Location", systemImage: "location.fill") { AnyView(LocationSimulationView()) })
             }
         }
         return tabs
@@ -160,44 +160,38 @@ struct MainTabView: View {
 
             if showForceUpdate {
                 ZStack {
-                    Color.black.opacity(0.001).ignoresSafeArea()
+                    Color.black.opacity(0.4).ignoresSafeArea()
 
-                    appGlassCard {
-                        VStack(spacing: 20) {
-                            Text("Update Required")
-                                .font(.title.bold())
-                                .multilineTextAlignment(.center)
+                    VStack(spacing: 20) {
+                        Text("Update Required")
+                            .font(.title.bold())
+                            .multilineTextAlignment(.center)
 
-                            Text("A new version (\(latestVersion ?? "unknown")) is available. Please update to continue using the app.")
-                                .multilineTextAlignment(.center)
-                                .font(.callout)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal)
+                        Text("A new version (\(latestVersion ?? "unknown")) is available. Please update to continue using the app.")
+                            .multilineTextAlignment(.center)
+                            .font(.callout)
+                            .foregroundColor(.secondary)
 
-                            Button(action: {
-                                let urlString: String
-                                if isAppStoreBuild {
-                                    urlString = "itms-apps://itunes.apple.com/app/id6744045754"
-                                } else {
-                                    urlString = "altstore://source?url=https://StikDebug.xyz/apps.json"
-                                }
-                                if let url = URL(string: urlString) {
-                                    UIApplication.shared.open(url)
-                                }
-                            }) {
-                                Text("Update Now")
-                                    .font(.headline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                            .fill(Color.accentColor)
-                                    )
-                                    .foregroundColor(.white)
+                        Button {
+                            let urlString: String
+                            if isAppStoreBuild {
+                                urlString = "itms-apps://itunes.apple.com/app/id6744045754"
+                            } else {
+                                urlString = "altstore://source?url=https://StikDebug.xyz/apps.json"
                             }
-                            .padding(.top, 10)
+                            if let url = URL(string: urlString) {
+                                UIApplication.shared.open(url)
+                            }
+                        } label: {
+                            Text("Update Now")
+                                .font(.headline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
                         }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 4)
                     }
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .padding(.horizontal, 40)
                 }
                 .transition(.opacity.combined(with: .scale))

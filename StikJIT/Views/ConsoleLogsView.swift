@@ -10,7 +10,6 @@ import UIKit
 
 struct ConsoleLogsView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accentColor) private var environmentAccentColor
     @StateObject private var logManager = LogManager.shared
     @StateObject private var systemLogStream = SystemLogStream()
     @State private var selectedConsoleTab: ConsoleTab = .idevice
@@ -33,7 +32,6 @@ struct ConsoleLogsView: View {
     private let appLogRefreshInterval: TimeInterval = 3.0
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @Environment(\.themeExpansionManager) private var themeExpansion
-    private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
     private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
     private let syslogIntervalOptions: [Double] = [0.0, 0.2, 0.5, 1.0, 1.5, 2.0]
 
@@ -41,122 +39,85 @@ struct ConsoleLogsView: View {
         themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue
     }
 
-    private var overlayOpacity: Double {
-        colorScheme == .dark ? 0.82 : 0.9
-    }
-
     var body: some View {
-        NavigationView {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
-                Color(colorScheme == .dark ? .black : .white)
-                    .opacity(overlayOpacity)
-                    .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    if selectedConsoleTab == .syslog {
-                        syslogBetaTag
-                    }
-
-                    Group {
-                        if selectedConsoleTab == .idevice {
-                            jitLogsPane
-                        } else {
-                            syslogLogsPane
-                        }
-                    }
-
-                    Spacer(minLength: 0)
-
-                    Group {
-                        if selectedConsoleTab == .idevice {
-                            jitFooter
-                        } else {
-                            syslogFooter
-                        }
-                    }
+        NavigationStack {
+            Group {
+                if selectedConsoleTab == .idevice {
+                    jitLogsPane
+                } else {
+                    syslogLogsPane
                 }
-                .padding(.top, 12)
-                .navigationBarTitleDisplayMode(.inline)
             }
-            .overlay(
-                Group {
-                    if showingCustomAlert {
-                        Color.black.opacity(0.4)
-                            .edgesIgnoringSafeArea(.all)
-                            .overlay(
-                                CustomErrorView(
-                                    title: alertTitle,
-                                    message: alertMessage,
-                                    onDismiss: {
-                                        showingCustomAlert = false
-                                    },
-                                    showButton: true,
-                                    primaryButtonText: "OK",
-                                    messageType: isError ? .error : .success
-                                )
-                            )
+            .padding(.top, 12)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("", selection: $selectedConsoleTab) {
+                        Text("idevice").tag(ConsoleTab.idevice)
+                        Text("Syslog").tag(ConsoleTab.syslog)
                     }
-                    if showingSyslogSpeedSelector {
-                        Color.black.opacity(0.45)
-                            .ignoresSafeArea()
-                            .onTapGesture { showingSyslogSpeedSelector = false }
-                            .overlay(
-                                appGlassCard {
-                                    VStack(spacing: 18) {
-                                        HStack {
-                                            Text("Syslog Speed")
-                                                .font(.title3.weight(.semibold))
-                                            Spacer()
-                                            Button {
-                                                showingSyslogSpeedSelector = false
-                                            } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                        Text("Choose how quickly new relay entries appear.")
-                                            .font(.footnote)
-                                            .foregroundColor(.secondary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        VStack(spacing: 10) {
-                                            ForEach(syslogIntervalOptions, id: \.self) { option in
-                                                Button {
-                                                    systemLogStream.updateInterval = option
-                                                    showingSyslogSpeedSelector = false
-                                                } label: {
-                                                    HStack {
-                                                        Text(intervalLabel(for: option))
-                                                            .font(.headline)
-                                                        Spacer()
-                                                        if abs(systemLogStream.updateInterval - option) < 0.01 {
-                                                            Image(systemName: "checkmark.circle.fill")
-                                                                .foregroundColor(accentColor)
-                                                        }
-                                                    }
-                                                    .padding(.horizontal, 18)
-                                                    .frame(maxWidth: .infinity, minHeight: 44)
-                                                }
-                                                .buttonStyle(
-                                                    GlassOvalButtonStyle(
-                                                        height: 44,
-                                                        strokeOpacity: abs(systemLogStream.updateInterval - option) < 0.01 ? 0.35 : 0.15
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, 30)
-                            )
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        if selectedConsoleTab == .idevice {
+                            Button("Refresh", systemImage: "arrow.clockwise") {
+                                Task { await loadIdeviceLogsAsync() }
+                            }
+                            Button("Clear", systemImage: "trash", role: .destructive) {
+                                logManager.clearLogs()
+                            }
+                            Button("Copy Logs", systemImage: "doc.on.doc") {
+                                copyJITLogs()
+                            }
+                            exportMenuOption
+                        } else {
+                            Button(syslogControlLabel, systemImage: syslogControlIcon) {
+                                toggleSyslogPlayback()
+                            }
+                            Button("Clear", systemImage: "trash", role: .destructive) {
+                                systemLogStream.clear()
+                            }
+                            Button("Copy Logs", systemImage: "doc.on.doc") {
+                                copySyslogToClipboard()
+                            }
+                            Button("Adjust Speed", systemImage: "slider.horizontal.3") {
+                                showingSyslogSpeedSelector = true
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
-            )
+            }
+            .overlay {
+                if showingCustomAlert {
+                    Color.black.opacity(0.4)
+                        .edgesIgnoringSafeArea(.all)
+                        .overlay(
+                            CustomErrorView(
+                                title: alertTitle,
+                                message: alertMessage,
+                                onDismiss: { showingCustomAlert = false },
+                                showButton: true,
+                                primaryButtonText: "OK",
+                                messageType: isError ? .error : .success
+                            )
+                        )
+                }
+            }
+            .confirmationDialog("Syslog Speed", isPresented: $showingSyslogSpeedSelector) {
+                ForEach(syslogIntervalOptions, id: \.self) { option in
+                    Button(intervalLabel(for: option)) {
+                        systemLogStream.updateInterval = option
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Choose how quickly new relay entries appear.")
+            }
         }
-        .navigationViewStyle(.stack)
         .preferredColorScheme(preferredScheme)
         .onDisappear {
             systemLogStream.stop()
@@ -282,197 +243,40 @@ struct ConsoleLogsView: View {
         }
     }
 
-    private var jitFooter: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .imageScale(.small)
-                    .foregroundColor(.red)
-                Text("\(logManager.errorCount)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.secondary)
-            }
-            Spacer(minLength: 8)
-
-            Button {
-                Task { await loadIdeviceLogsAsync() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .foregroundColor(accentColor)
-            }
-            .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-            .accessibilityLabel("Refresh app logs")
-
-            Button {
-                logManager.clearLogs()
-            } label: {
-                Image(systemName: "trash")
-                    .foregroundColor(accentColor)
-            }
-            .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-            .accessibilityLabel("Clear app logs")
-
-            Button {
-                var logsContent = "=== DEVICE INFORMATION ===\n"
-                logsContent += "Version: \(UIDevice.current.systemVersion)\n"
-                logsContent += "Name: \(UIDevice.current.name)\n"
-                logsContent += "Model: \(UIDevice.current.model)\n"
-                logsContent += "StikJIT Version: App Version: 1.0\n\n"
-                logsContent += "=== LOG ENTRIES ===\n"
-
-                logsContent += logManager.logs.map {
-                    "[\(formatTime(date: $0.timestamp))] [\($0.type.rawValue)] \($0.message)"
-                }.joined(separator: "\n")
-
-                UIPasteboard.general.string = logsContent
-
-                alertTitle = "Logs Copied"
-                alertMessage = "Logs have been copied to clipboard."
-                isError = false
-                showingCustomAlert = true
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .foregroundColor(accentColor)
-            }
-            .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-            .accessibilityLabel("Copy app logs")
-
-            exportControl
-
-            Button {
-                selectedConsoleTab = .syslog
-            } label: {
-                Image(systemName: "rectangle.2.swap")
-                    .foregroundColor(accentColor)
-            }
-            .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-            .accessibilityLabel("Switch to syslog relay")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
-
-    private var syslogFooter: some View {
-        VStack(spacing: 10) {
-            if let error = systemLogStream.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            HStack(spacing: 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .imageScale(.small)
-                        .foregroundColor(.red)
-                    Text("\(syslogErrorCount)")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer(minLength: 8)
-
-                Button(action: toggleSyslogPlayback) {
-                    Image(systemName: syslogControlIcon)
-                        .foregroundColor(accentColor)
-                }
-                .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-                .accessibilityLabel(syslogControlLabel)
-
-                Button(action: { systemLogStream.clear() }) {
-                    Image(systemName: "trash")
-                        .foregroundColor(accentColor)
-                }
-                .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-                .accessibilityLabel("Clear syslog entries")
-
-                Button(action: copySyslogToClipboard) {
-                    Image(systemName: "doc.on.doc")
-                        .foregroundColor(accentColor)
-                }
-                .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-                .accessibilityLabel("Copy syslog entries")
-
-                Button {
-                    showingSyslogSpeedSelector.toggle()
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .foregroundColor(accentColor)
-                }
-                .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-                .accessibilityLabel("Adjust syslog speed")
-
-                Button {
-                    selectedConsoleTab = .idevice
-                } label: {
-                    Image(systemName: "rectangle.2.swap")
-                        .foregroundColor(accentColor)
-                }
-                .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-                .accessibilityLabel("Switch to app logs")
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
-
-    private var syslogBetaTag: some View {
-        HStack(spacing: 10) {
-            Label {
-                Text("Syslogs")
-                    .font(.headline.weight(.semibold))
-            } icon: {
-                Image(systemName: "waveform.path.ecg")
-                    .foregroundColor(accentColor)
-            }
-
-            Text("BETA")
-                .font(.caption2.weight(.bold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .foregroundColor(accentColor)
-                .background(
-                    Capsule()
-                        .fill(accentColor.opacity(colorScheme == .dark ? 0.22 : 0.12))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(accentColor.opacity(0.45), lineWidth: 1)
-                )
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .transition(.opacity)
+    private func copyJITLogs() {
+        var logsContent = "=== DEVICE INFORMATION ===\n"
+        logsContent += "Version: \(UIDevice.current.systemVersion)\n"
+        logsContent += "Name: \(UIDevice.current.name)\n"
+        logsContent += "Model: \(UIDevice.current.model)\n"
+        logsContent += "StikJIT Version: App Version: 1.0\n\n"
+        logsContent += "=== LOG ENTRIES ===\n"
+        logsContent += logManager.logs.map {
+            "[\(formatTime(date: $0.timestamp))] [\($0.type.rawValue)] \($0.message)"
+        }.joined(separator: "\n")
+        UIPasteboard.general.string = logsContent
+        alertTitle = "Logs Copied"
+        alertMessage = "Logs have been copied to clipboard."
+        isError = false
+        showingCustomAlert = true
     }
 
     @ViewBuilder
-    private var exportControl: some View {
+    private var exportMenuOption: some View {
         let logURL: URL = URL.documentsDirectory.appendingPathComponent("idevice_log.txt")
         if FileManager.default.fileExists(atPath: logURL.path) {
             ShareLink(
                 item: logURL,
                 preview: SharePreview("idevice_log.txt", image: Image(systemName: "doc.text"))
             ) {
-                Image(systemName: "square.and.arrow.up")
-                    .foregroundColor(accentColor)
+                Label("Export Logs", systemImage: "square.and.arrow.up")
             }
-            .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-            .accessibilityLabel("Export app logs")
         } else {
-            Button {
+            Button("Export Logs", systemImage: "square.and.arrow.up") {
                 alertTitle = "Export Failed"
                 alertMessage = "No idevice logs found"
                 isError = true
                 showingCustomAlert = true
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .foregroundColor(accentColor)
             }
-            .buttonStyle(GlassOvalButtonStyle(height: 36, strokeOpacity: 0.18))
-            .accessibilityLabel("Export app logs")
         }
     }
     
@@ -752,22 +556,6 @@ struct ConsoleLogsView: View {
 
 }
 
-private struct GlassOvalButtonStyle: ButtonStyle {
-    var height: CGFloat = 36
-    var strokeOpacity: Double = 0.16
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.horizontal, 14)
-            .frame(height: height)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(.white.opacity(strokeOpacity), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.08), radius: configuration.isPressed ? 4 : 10, x: 0, y: configuration.isPressed ? 1 : 4)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-    }
-}
 
 struct ConsoleLogsView_Previews: PreviewProvider {
     static var previews: some View {

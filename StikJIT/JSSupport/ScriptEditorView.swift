@@ -37,7 +37,7 @@ struct ScriptEditorView: View {
                     text:     $scriptContent,
                     position: $position,
                     messages: $messages,
-                    language: .swift()
+                    language: .none
                 )
                 .font(.system(.footnote, design: .monospaced))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

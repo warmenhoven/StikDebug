@@ -10,58 +10,9 @@ import MapKit
 import UIKit
 import Pipify
 
-struct MapSelectionView: UIViewRepresentable {
-    @Binding var coordinate: CLLocationCoordinate2D?
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject, MKMapViewDelegate {
-        var parent: MapSelectionView
-
-        init(_ parent: MapSelectionView) {
-            self.parent = parent
-        }
-
-        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
-            guard gesture.state == .began,
-                  let map = gesture.view as? MKMapView
-            else { return }
-
-            let point = gesture.location(in: map)
-            parent.coordinate = map.convert(point, toCoordinateFrom: map)
-        }
-    }
-
-    func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView(frame: .zero)
-        mapView.delegate = context.coordinator
-
-        let longPress = UILongPressGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handleLongPress(_:))
-        )
-        mapView.addGestureRecognizer(longPress)
-
-        return mapView
-    }
-
-    func updateUIView(_ uiView: MKMapView, context: Context) {
-        uiView.removeAnnotations(uiView.annotations)
-
-        if let coord = coordinate {
-            let annotation = MKPointAnnotation()
-            annotation.coordinate = coord
-            uiView.addAnnotation(annotation)
-
-            let region = MKCoordinateRegion(
-                center: coord,
-                latitudinalMeters: 500,
-                longitudinalMeters: 500
-            )
-            uiView.setRegion(region, animated: true)
-        }
+extension CLLocationCoordinate2D: Equatable {
+    public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
+        lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
     }
 }
 
@@ -72,23 +23,15 @@ final class LocationSpoofingPiPState: ObservableObject {
 }
 
 struct LocationSimulationView: View {
-    @Environment(\.themeExpansionManager) private var themeExpansion
     @State private var coordinate: CLLocationCoordinate2D?
-    @State private var statusMessage: String = ""
-    @State private var statusIsError = false
-    @State private var showKeepOpenAlert = false
-    @State private var searchQuery = ""
-    @State private var searchResults: [SearchResult] = []
+    @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
+    
     @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     @State private var resendTimer: Timer?
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
+    
     @AppStorage("enablePiP") private var enablePiP = true
     @State private var pipPresented = false
     @StateObject private var pipState = LocationSpoofingPiPState()
-
-    private var backgroundStyle: BackgroundStyle {
-        themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle
-    }
     
     private var isAppStoreBuild: Bool {
         #if APPSTORE
@@ -97,286 +40,131 @@ struct LocationSimulationView: View {
         return false
         #endif
     }
-
+    
     private var pairingFilePath: String {
-        let docPathUrl = FileManager.default
-            .urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let currentDeviceUUIDStr = UserDefaults.standard.string(forKey: "DeviceLibraryActiveDeviceID")
-
-        let pairingFileURL: URL
-        if let uuid = currentDeviceUUIDStr,
-           uuid != "00000000-0000-0000-0000-000000000001" {
-
-            pairingFileURL = docPathUrl.appendingPathComponent(
-                "DeviceLibrary/Pairings/\(uuid).mobiledevicepairing"
-            )
-        } else {
-            pairingFileURL = docPathUrl.appendingPathComponent("pairingFile.plist")
-        }
-        
-        return pairingFileURL.path()
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let uuid = UserDefaults.standard.string(forKey: "DeviceLibraryActiveDeviceID") ?? ""
+        let name = (uuid != "00000000-0000-0000-0000-000000000001" && !uuid.isEmpty)
+            ? "DeviceLibrary/Pairings/\(uuid).mobiledevicepairing"
+            : "pairingFile.plist"
+        return docs.appendingPathComponent(name).path()
     }
-
+    
     private var pairingExists: Bool {
         FileManager.default.fileExists(atPath: pairingFilePath)
     }
-
+    
     private var deviceIP: String {
         UserDefaults.standard.string(forKey: "TunnelDeviceIP") ?? "10.7.0.1"
     }
-
+    
     var body: some View {
-        NavigationStack {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 20) {
-                        searchCard
-                        mapCard
-                        actionsCard
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 24)
-                }
-
-                if showKeepOpenAlert {
-                    CustomErrorView(
-                        title: "Keep StikDebug Open",
-                        message: "Location simulation stops if the app is backgrounded. Keep StikDebug in the foreground while testing.",
-                        onDismiss: { showKeepOpenAlert = false },
-                        primaryButtonText: "OK",
-                        showSecondaryButton: false,
-                        messageType: .info
-                    )
-                    .transition(.opacity.combined(with: .scale))
-                    .zIndex(1)
-                }
-            }
-            .navigationTitle("Location Simulator")
-            .onDisappear {
-                stopResendLoop()
-                endBackgroundTask()
-                dismissPiPSession()
-            }
-            .onChange(of: enablePiP) { _, newValue in
-                if !newValue {
-                    pipPresented = false
-                }
-            }
-        }
-        .pipify(isPresented: Binding(
-            get: { pipPresented && enablePiP },
-            set: { pipPresented = $0 }
-        )) {
-            LocationSpoofingPiPView(state: pipState)
-        }
-    }
-
-    private var searchCard: some View {
-        MaterialCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Pick a Location")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                searchField
-                if !searchResults.isEmpty {
-                    Divider()
-                    ForEach(searchResults) { result in
-                        Button(action: { select(result: result) }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(result.name)
-                                    .font(.subheadline.weight(.semibold))
-                                Text(result.subtitle)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.plain)
-                        if result.id != searchResults.last?.id {
-                            Divider()
-                        }
+        ZStack(alignment: .bottom) {
+            MapReader { proxy in
+                Map(position: $position) {
+                    if let coordinate {
+                        Marker("Pin", coordinate: coordinate)
+                            .tint(.red)
                     }
                 }
-                if !pairingExists && !isAppStoreBuild {
-                    Label("Import a pairing file first.", systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                .mapStyle(.standard(elevation: .realistic))
+                .onTapGesture { point in
+                    if let loc = proxy.convert(point, from: .local) {
+                        coordinate = loc
+                    }
                 }
-                if isAppStoreBuild {
-                    Label("Location simulation is unavailable in App Store builds.", systemImage: "nosign")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                .mapControls {
+                    MapUserLocationButton()
+                    MapCompass()
                 }
             }
-        }
-    }
-
-    private var searchField: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            TextField("Search for a place", text: $searchQuery, onCommit: performSearch)
-                .textInputAutocapitalization(.never)
-                .disableAutocorrection(true)
-        }
-        .padding(12)
-        .background(Color(UIColor.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private var mapCard: some View {
-        MaterialCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Map")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                MapSelectionView(coordinate: $coordinate)
-                    .frame(height: 320)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
+            .ignoresSafeArea()
+            .onChange(of: coordinate) { _, new in
+                if let new {
+                    position = .region(MKCoordinateRegion(center: new, latitudinalMeters: 1000, longitudinalMeters: 1000))
+                }
+            }
+            
+            VStack(spacing: 12) {
                 if let coord = coordinate {
                     Text(String(format: "%.6f, %.6f", coord.latitude, coord.longitude))
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
+                    
+                    HStack(spacing: 12) {
+                        Button("Stop", action: clear)
+                            .buttonStyle(.bordered)
+                            .tint(.red)
+                            .disabled(!pairingExists)
+                        
+                        Button("Simulate Location", action: simulate)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(isAppStoreBuild || !pairingExists)
+                    }
                 } else {
-                    Text("Long-press on the map or search above to drop a pin.")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-    }
-
-    private var actionsCard: some View {
-        MaterialCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Actions")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                HStack(spacing: 12) {
-                    Button(action: simulate) {
-                        Label("Simulate", systemImage: "location.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isAppStoreBuild || coordinate == nil || !pairingExists)
-
-                    Button(action: clear) {
-                        Label("Clear", systemImage: "xmark.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isAppStoreBuild || !pairingExists)
-                }
-                if !statusMessage.isEmpty {
-                    Text(statusMessage)
+                    Text("Tap map to drop pin")
                         .font(.subheadline)
-                        .foregroundColor(statusIsError ? .red : .green)
+                        .foregroundStyle(.secondary)
                 }
-                Text("Device IP: \(deviceIP)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
+            .padding(.bottom, 24)
+            .padding(.horizontal, 16)
         }
-    }
-
-    private func performSearch() {
-        guard !searchQuery.isEmpty else { return }
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = searchQuery
-        MKLocalSearch(request: request).start { response, _ in
-            let items = response?.mapItems ?? []
-            searchResults = items.map { item in
-                SearchResult(
-                    name: item.name ?? "Unknown",
-                    subtitle: item.placemark.title ?? "",
-                    item: item
-                )
-            }
-        }
-    }
-
-    private func select(result: SearchResult) {
-        coordinate = result.item.placemark.coordinate
-        statusMessage = ""
-        searchResults = []
-        searchQuery = result.name
-    }
-
-    private func simulate() {
-        guard pairingExists else {
-            statusMessage = "Pairing file missing."
-            statusIsError = true
-            return
-        }
-        guard let coord = coordinate else { return }
-        let code = simulate_location(deviceIP, coord.latitude, coord.longitude, pairingFilePath)
-        if code == 0 {
-            statusMessage = "Simulation running…"
-            statusIsError = false
-            showKeepOpenAlert = true
-            beginBackgroundTask()
-            startResendLoop()
-            recordPiPEvent(status: "Simulating…", coordinate: coord)
-        } else {
-            statusMessage = "Simulation failed (code \(code))."
-            statusIsError = true
+        .navigationBarHidden(true)
+        .onDisappear {
             stopResendLoop()
             endBackgroundTask()
             dismissPiPSession()
         }
+        .pipify(isPresented: Binding(get: { pipPresented && enablePiP }, set: { pipPresented = $0 })) {
+            LocationSpoofingPiPView(state: pipState)
+        }
     }
-
+    
+    private func simulate() {
+        guard pairingExists, let coord = coordinate else { return }
+        let code = simulate_location(deviceIP, coord.latitude, coord.longitude, pairingFilePath)
+        if code == 0 {
+            beginBackgroundTask()
+            startResendLoop()
+            recordPiPEvent(status: "Simulating…", coordinate: coord)
+        }
+    }
+    
     private func clear() {
         guard pairingExists else { return }
         let code = clear_simulated_location()
-        statusMessage = code == 0 ? "Cleared simulation." : "Clear failed (code \(code))."
-        statusIsError = code != 0
-        showKeepOpenAlert = false
-        stopResendLoop()
-        endBackgroundTask()
         if code == 0 {
-            recordPiPEvent(status: "Simulation cleared", coordinate: nil)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            coordinate = nil
+            stopResendLoop()
+            endBackgroundTask()
+            recordPiPEvent(status: "Cleared", coordinate: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 dismissPiPSession()
             }
-        } else {
-            dismissPiPSession()
         }
     }
     
     private func beginBackgroundTask() {
         guard backgroundTaskID == .invalid else { return }
-        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "LocationSimulation") {
-            endBackgroundTask()
-        }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask { endBackgroundTask() }
     }
-
+    
     private func endBackgroundTask() {
         guard backgroundTaskID != .invalid else { return }
         UIApplication.shared.endBackgroundTask(backgroundTaskID)
         backgroundTaskID = .invalid
     }
-
+    
     private func startResendLoop() {
         resendTimer?.invalidate()
         resendTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in
-            guard self.pairingExists, let coord = self.coordinate else { return }
-            _ = simulate_location(self.deviceIP, coord.latitude, coord.longitude, self.pairingFilePath)
-            self.recordPiPEvent(status: "Location refreshed", coordinate: coord)
-        }
-        if let coord = coordinate {
-            recordPiPEvent(status: "Simulating…", coordinate: coord)
+            guard pairingExists, let coord = coordinate else { return }
+            _ = simulate_location(deviceIP, coord.latitude, coord.longitude, pairingFilePath)
+            recordPiPEvent(status: "Refreshed", coordinate: coord)
         }
     }
-
+    
     private func stopResendLoop() {
         resendTimer?.invalidate()
         resendTimer = nil
@@ -390,68 +178,31 @@ struct LocationSimulationView: View {
             pipPresented = true
         }
     }
-
+    
     private func dismissPiPSession() {
-        DispatchQueue.main.async {
-            pipPresented = false
-            pipState.lastUpdated = nil
-            pipState.coordinate = nil
-        }
+        pipPresented = false
+        pipState.coordinate = nil
+        pipState.lastUpdated = nil
     }
-}
-
-private struct SearchResult: Identifiable {
-    let id = UUID()
-    let name: String
-    let subtitle: String
-    let item: MKMapItem
 }
 
 private struct LocationSpoofingPiPView: View {
     @ObservedObject var state: LocationSpoofingPiPState
     
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter
-    }()
-    
-    private var coordinateText: String? {
-        guard let coordinate = state.coordinate else { return nil }
-        return String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
-    }
-    
-    private var lastUpdatedText: String? {
-        guard let lastUpdated = state.lastUpdated else { return nil }
-        let label = Self.relativeFormatter.localizedString(for: lastUpdated, relativeTo: Date())
-        return "Last send \(label)"
-    }
-    
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(state.status)
                 .font(.headline)
-                .foregroundColor(.white)
-            if let coordinateText {
-                Text(coordinateText)
-                    .font(.subheadline.monospaced())
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            if let lastUpdatedText {
-                Text(lastUpdatedText)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.8))
+            if let coord = state.coordinate {
+                Text(String(format: "%.5f, %.5f", coord.latitude, coord.longitude))
+                    .font(.caption.monospaced())
             }
             Spacer()
             Text("Location Spoofing")
                 .font(.caption2)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundStyle(.secondary)
         }
         .padding()
-        .frame(width: 280, height: 150, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.black.opacity(0.65))
-        )
+        .frame(width: 260, height: 130)
     }
 }

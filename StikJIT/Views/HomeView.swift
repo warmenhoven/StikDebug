@@ -12,6 +12,7 @@ import UIKit
 import WidgetKit
 import Combine
 import Network
+import SafariServices
 
 struct JITEnableConfiguration {
     var bundleID: String? = nil
@@ -25,7 +26,6 @@ struct HomeView: View {
     @AppStorage("username") private var username = "User"
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accentColor) private var environmentAccentColor
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @AppStorage("bundleID") private var bundleID: String = ""
     @AppStorage("recentApps") private var recentApps: [String] = []
@@ -77,7 +77,6 @@ struct HomeView: View {
     
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @Environment(\.themeExpansionManager) private var themeExpansion
-    private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
     private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
     
     private var accentColor: Color {
@@ -87,24 +86,11 @@ struct HomeView: View {
     private var ddiMounted: Bool { true }
     private var canConnectByApp: Bool { pairingFileExists && ddiMounted }
     private var requiresLoopbackVPN: Bool { DeviceConnectionContext.requiresLoopbackVPN }
-    private var pairingFileLikelyInvalid: Bool { false }
     private var sanitizedUsername: String {
         let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "there" : trimmed
     }
-    private var greetingTitle: String {
-        "\(timeOfDayGreeting), \(sanitizedUsername)!"
-    }
-    private var greetingSubtitle: String {
-        if canConnectByApp {
-            return "You're all set. Connect whenever you're ready."
-        } else if !pairingFileExists {
-            return "Import your pairing file to start debugging."
-        } else if !ddiMounted {
-            return "Mount the DDI to finish preparing your device."
-        }
-        return "Complete the steps below to get ready."
-    }
+    
     private var timeOfDayGreeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
@@ -114,39 +100,139 @@ struct HomeView: View {
         default: return "Hello"
         }
     }
-    private var shouldPromptForWiFi: Bool { false }
-    
     private let pairingFileURL = URL.documentsDirectory.appendingPathComponent("pairingFile.plist")
-    
-    @ViewBuilder
-    private var homeContent: some View {
-        VStack(spacing: 20) {
-            welcomeCard
-            heartbeatCard
-            connectCard
-            // if pairingFileExists {
-            //        quickConnectCard
-            //  }
-            if !pinnedLaunchItems.isEmpty {
-                launchShortcutsCard
-            }
-            tipsCard
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 30)
-    }
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    homeContent
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Status Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Status")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 4)
+                        
+                        VStack(spacing: 0) {
+                            HStack {
+                                Label("Heartbeat", systemImage: "waveform.path.ecg")
+                                    .font(.body.weight(.medium))
+                                Spacer()
+                                heartbeatStatusBadge
+                            }
+                            .padding()
+                            
+                            Divider()
+                                .padding(.leading)
+                            
+                            if !heartbeatOK {
+                                Button {
+                                    startHeartbeatInBackground()
+                                } label: {
+                                    Text("Start Heartbeat")
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                        .padding(.vertical, 12)
+                                        .foregroundColor(accentColor)
+                                }
+                            } else {
+                                Button {
+                                    pubHeartBeat = false
+                                    heartbeatOK = false
+                                    startHeartbeatInBackground()
+                                } label: {
+                                    Text("Restart Heartbeat")
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                        .padding(.vertical, 12)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                        }
+                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    
+                    // Actions Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Actions")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 4)
+                        
+                        VStack(spacing: 12) {
+                            Button(action: primaryActionTapped) {
+                                HStack {
+                                    Label(primaryActionTitle, systemImage: primaryActionIcon)
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                    if isValidatingPairingFile {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    }
+                                }
+                                .padding()
+                                .background(accentColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .disabled(isProcessing || isValidatingPairingFile)
+                            
+                            if pairingFileExists && enableAdvancedOptions && primaryActionTitle == "Connect by App" {
+                                Button { showPIDSheet = true } label: {
+                                    HStack {
+                                        Label("Connect by PID", systemImage: "number.circle")
+                                            .font(.body.weight(.medium))
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                }
+                            }
+                            
+                            if pairingFileExists {
+                                 Button {
+                                     isShowingPairingFilePicker = true
+                                 } label: {
+                                     Label("Import New Pairing File", systemImage: "doc.badge.arrow.up")
+                                         .font(.subheadline.weight(.medium))
+                                         .foregroundColor(.secondary)
+                                         .padding()
+                                         .frame(maxWidth: .infinity)
+                                         .background(Color(UIColor.secondarySystemGroupedBackground))
+                                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                 }
+                            }
+                            
+                            if let info = connectionInfoMessage, !info.isEmpty {
+                                Text(info)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 4)
+                            }
+                            
+                            if isImportingFile {
+                                pairingImportProgressView
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                        }
+                    }
                 }
-                .scrollIndicators(.hidden)
-                
+                .padding()
+            }
+            .background(Color(UIColor.systemGroupedBackground))
+            .navigationTitle("\(timeOfDayGreeting), \(sanitizedUsername)")
+            .preferredColorScheme(preferredScheme)
+            .overlay {
                 if isImportingFile {
                     Color.black.opacity(0.35).ignoresSafeArea()
                     ProgressView("Processing pairing file…")
@@ -154,14 +240,9 @@ struct HomeView: View {
                         .background(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-                                )
                         )
                         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
                 }
-                
                 if showPairingFileMessage && pairingFileIsValid && !isImportingFile {
                     toast("✓ Pairing file successfully imported")
                 }
@@ -172,327 +253,237 @@ struct HomeView: View {
                     toast(message)
                 }
             }
-            .navigationTitle("Home")
-        }
-        .preferredColorScheme(preferredScheme)
-        .onAppear {
-            scheduleInitialSetupWork()
-            startWiFiMonitoring()
-            startCellularMonitoring()
-            if !hasAutoStartedConnectionCheck {
-                hasAutoStartedConnectionCheck = true
-                runConnectionDiagnostics(autoStart: true)
+            .onAppear {
+                scheduleInitialSetupWork()
+                startWiFiMonitoring()
+                startCellularMonitoring()
+                if !hasAutoStartedConnectionCheck {
+                    hasAutoStartedConnectionCheck = true
+                    runConnectionDiagnostics(autoStart: true)
+                }
+                startHeartbeatInBackground()
+                NotificationCenter.default.addObserver(
+                    forName: NSNotification.Name("ShowPairingFilePicker"),
+                    object: nil,
+                    queue: .main
+                ) { _ in isShowingPairingFilePicker = true }
             }
-            startHeartbeatInBackground()
-            NotificationCenter.default.addObserver(
-                forName: NSNotification.Name("ShowPairingFilePicker"),
-                object: nil,
-                queue: .main
-            ) { _ in isShowingPairingFilePicker = true }
-        }
-        .onDisappear {
-            connectionTimeoutTask?.cancel()
-            connectionTimeoutTask = nil
-            stopWiFiMonitoring()
-            stopCellularMonitoring()
-            hasAutoStartedConnectionCheck = false
-        }
-        .onReceive(timer) { _ in
-            refreshBackground()
-            checkPairingFileExists()
-            heartbeatOK = pubHeartBeat
-            if mounting.mountingThread == nil && !mounting.coolisMounted {
-                MountingProgress.shared.checkforMounted()
+            .onDisappear {
+                connectionTimeoutTask?.cancel()
+                connectionTimeoutTask = nil
+                stopWiFiMonitoring()
+                stopCellularMonitoring()
+                hasAutoStartedConnectionCheck = false
             }
-        }
-        .onChange(of: pairingFileExists) { _, newValue in
-            if newValue {
-                loadAppListIfNeeded(force: cachedAppNames.isEmpty)
-                runConnectionDiagnostics()
-            } else {
-                cachedAppNames = [:]
+            .onReceive(timer) { _ in
+                refreshBackground()
+                checkPairingFileExists()
+                heartbeatOK = pubHeartBeat
+                if mounting.mountingThread == nil && !mounting.coolisMounted {
+                    MountingProgress.shared.checkforMounted()
+                }
             }
-        }
-        .onChange(of: favoriteApps) { _, _ in
-            loadAppListIfNeeded()
-            syncFavoriteAppNamesWithCache()
-        }
-        .onChange(of: recentApps) { _, _ in
-            loadAppListIfNeeded()
-        }
-        .fileImporter(isPresented: $isShowingPairingFilePicker, allowedContentTypes: [UTType(filenameExtension: "mobiledevicepairing", conformingTo: .data)!, .propertyList]) { result in
-            switch result {
-            case .success(let url):
-                let fileManager = FileManager.default
-                let accessing = url.startAccessingSecurityScopedResource()
-                
-                if fileManager.fileExists(atPath: url.path) {
-                    do {
-                        let dest = URL.documentsDirectory.appendingPathComponent("pairingFile.plist")
-                        if FileManager.default.fileExists(atPath: dest.path) {
-                            try fileManager.removeItem(at: dest)
-                        }
-                        try fileManager.copyItem(at: url, to: dest)
-                        
-                        DispatchQueue.main.async {
-                            isImportingFile = true
-                            importProgress = 0
-                            pairingFileExists = true
-                        }
-                        
-                        DispatchQueue.main.async {
-                            startHeartbeatInBackground()
-                        }
-                        
-                        let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { t in
+            .onChange(of: pairingFileExists) { _, newValue in
+                if newValue {
+                    loadAppListIfNeeded(force: cachedAppNames.isEmpty)
+                    runConnectionDiagnostics()
+                } else {
+                    cachedAppNames = [:]
+                }
+            }
+            .onChange(of: favoriteApps) { _, _ in
+                loadAppListIfNeeded()
+                syncFavoriteAppNamesWithCache()
+            }
+            .onChange(of: recentApps) { _, _ in
+                loadAppListIfNeeded()
+            }
+            .fileImporter(isPresented: $isShowingPairingFilePicker, allowedContentTypes: [UTType(filenameExtension: "mobiledevicepairing", conformingTo: .data)!, .propertyList]) { result in
+                switch result {
+                case .success(let url):
+                    let fileManager = FileManager.default
+                    let accessing = url.startAccessingSecurityScopedResource()
+                    
+                    if fileManager.fileExists(atPath: url.path) {
+                        do {
+                            let dest = URL.documentsDirectory.appendingPathComponent("pairingFile.plist")
+                            if FileManager.default.fileExists(atPath: dest.path) {
+                                try fileManager.removeItem(at: dest)
+                            }
+                            try fileManager.copyItem(at: url, to: dest)
+                            
                             DispatchQueue.main.async {
-                                if importProgress < 1 {
-                                    importProgress += 0.25
-                                } else {
-                                    t.invalidate()
-                                    isImportingFile = false
-                                    pairingFileIsValid = true
-                                    withAnimation { showPairingFileMessage = true }
-                                    MountingProgress.shared.checkforMounted()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                        withAnimation { showPairingFileMessage = false }
+                                isImportingFile = true
+                                importProgress = 0
+                                pairingFileExists = true
+                            }
+                            
+                            DispatchQueue.main.async {
+                                startHeartbeatInBackground()
+                            }
+                            
+                            let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { t in
+                                DispatchQueue.main.async {
+                                    if importProgress < 1 {
+                                        importProgress += 0.25
+                                    } else {
+                                        t.invalidate()
+                                        isImportingFile = false
+                                        pairingFileIsValid = true
+                                        withAnimation { showPairingFileMessage = true }
+                                        MountingProgress.shared.checkforMounted()
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                            withAnimation { showPairingFileMessage = false }
+                                        }
                                     }
                                 }
                             }
-                        }
-                        RunLoop.current.add(progressTimer, forMode: .common)
-                    } catch {
-                        print("Error copying file: \(error)")
+                            RunLoop.current.add(progressTimer, forMode: .common)
+                        } catch { }
+                    }
+                    if accessing { url.stopAccessingSecurityScopedResource() }
+                case .failure:
+                    break
+                }
+            }
+            .sheet(isPresented: $isShowingInstalledApps) {
+                InstalledAppsListView { selectedBundle in
+                    bundleID = selectedBundle
+                    isShowingInstalledApps = false
+                    HapticFeedbackHelper.trigger()
+                    
+                    var autoScriptData: Data? = nil
+                    var autoScriptName: String? = nil
+                    
+                    if let scriptInfo = preferredScript(for: selectedBundle) {
+                        autoScriptData = scriptInfo.data
+                        autoScriptName = scriptInfo.name
+                    }
+                    
+                    startJITInBackground(bundleID: selectedBundle,
+                                         pid: nil,
+                                         scriptData: autoScriptData,
+                                         scriptName: autoScriptName,
+                                         triggeredByURLScheme: false)
+                }
+            }
+            .pipify(isPresented: Binding(
+                get: { pipRequired && enablePiP },
+                set: { pipRequired = $0 }
+            )) {
+                RunJSViewPiP(model: $jsModel)
+            }
+            .sheet(isPresented: $scriptViewShow) {
+                NavigationStack {
+                    if let jsModel {
+                        RunJSView(model: jsModel)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button("Done") { scriptViewShow = false }
+                                }
+                            }
+                            .navigationTitle(selectedScript)
+                            .navigationBarTitleDisplayMode(.inline)
                     }
                 }
-                if accessing { url.stopAccessingSecurityScopedResource() }
-            case .failure(let error):
-                print("Failed to import file: \(error)")
             }
-        }
-        .sheet(isPresented: $isShowingInstalledApps) {
-            InstalledAppsListView { selectedBundle in
-                bundleID = selectedBundle
-                isShowingInstalledApps = false
-                HapticFeedbackHelper.trigger()
-                
-                var autoScriptData: Data? = nil
-                var autoScriptName: String? = nil
-                
-                if let scriptInfo = preferredScript(for: selectedBundle) {
-                    autoScriptData = scriptInfo.data
-                    autoScriptName = scriptInfo.name
-                }
-                
-                startJITInBackground(bundleID: selectedBundle,
-                                     pid: nil,
-                                     scriptData: autoScriptData,
-                                     scriptName: autoScriptName,
-                                     triggeredByURLScheme: false)
+            .sheet(isPresented: $showPIDSheet) {
+                ConnectByPIDSheet(
+                    recentPIDs: $recentPIDs,
+                    onPasteCopyToast: { showCopiedToast() },
+                    onConnect: { pid in
+                        HapticFeedbackHelper.trigger()
+                        startJITInBackground(pid: pid)
+                    }
+                )
             }
-        }
-        .pipify(isPresented: Binding(
-            get: { pipRequired && enablePiP },
-            set: { pipRequired = $0 }
-        )) {
-            RunJSViewPiP(model: $jsModel)
-        }
-        .sheet(isPresented: $scriptViewShow) {
-            NavigationView {
-                if let jsModel {
-                    RunJSView(model: jsModel)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Done") { scriptViewShow = false }
+            .onOpenURL { url in
+                guard let host = url.host else { return }
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                switch host {
+                case "enable-jit":
+                    var config = JITEnableConfiguration()
+                    if let pidStr = components?.queryItems?.first(where: { $0.name == "pid" })?.value, let pid = Int(pidStr) {
+                        config.pid = pid
+                    }
+                    if let bundleId = components?.queryItems?.first(where: { $0.name == "bundle-id" })?.value {
+                        config.bundleID = bundleId
+                    }
+                    if let scriptBase64URL = components?.queryItems?.first(where: { $0.name == "script-data" })?.value?.removingPercentEncoding {
+                        let base64 = base64URLToBase64(scriptBase64URL)
+                        if let scriptData = Data(base64Encoded: base64) {
+                            config.scriptData = scriptData
+                        }
+                    }
+                    if let scriptName = components?.queryItems?.first(where: { $0.name == "script-name" })?.value {
+                        config.scriptName = scriptName
+                    }
+                    if config.scriptData == nil, let bundleID = config.bundleID,
+                       let scriptInfo = preferredScript(for: bundleID) {
+                        config.scriptData = scriptInfo.data
+                        config.scriptName = scriptInfo.name
+                    }
+                    if viewDidAppeared {
+                        startJITInBackground(bundleID: config.bundleID, pid: config.pid, scriptData: config.scriptData, scriptName: config.scriptName, triggeredByURLScheme: true)
+                    } else {
+                        pendingJITEnableConfiguration = config
+                    }
+                case "launch-app":
+                    if let bundleId = components?.queryItems?.first(where: { $0.name == "bundle-id" })?.value {
+                        HapticFeedbackHelper.trigger()
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let success = JITEnableContext.shared.launchAppWithoutDebug(bundleId, logger: nil)
+                            DispatchQueue.main.async {
+                                let nameRaw = pinnedSystemAppNames[bundleId] ?? friendlyName(for: bundleId)
+                                let name = shortDisplayName(from: nameRaw)
+                                systemLaunchMessage = success
+                                ? String(format: "Launch requested: %@".localized, name)
+                                : String(format: "Failed to launch %@".localized, name)
+                                scheduleSystemToastDismiss()
                             }
                         }
-                        .navigationTitle(selectedScript)
-                        .navigationBarTitleDisplayMode(.inline)
+                    }
+                default:
+                    break
                 }
             }
-        }
-        .sheet(isPresented: $showPIDSheet) {
-            ConnectByPIDSheet(
-                recentPIDs: $recentPIDs,
-                onPasteCopyToast: { showCopiedToast() },
-                onConnect: { pid in
-                    HapticFeedbackHelper.trigger()
-                    startJITInBackground(pid: pid)
-                }
-            )
-        }
-        .onOpenURL { url in
-            guard let host = url.host else { return }
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            switch host {
-            case "enable-jit":
-                var config = JITEnableConfiguration()
-                if let pidStr = components?.queryItems?.first(where: { $0.name == "pid" })?.value, let pid = Int(pidStr) {
-                    config.pid = pid
-                }
-                if let bundleId = components?.queryItems?.first(where: { $0.name == "bundle-id" })?.value {
-                    config.bundleID = bundleId
-                }
-                if let scriptBase64URL = components?.queryItems?.first(where: { $0.name == "script-data" })?.value?.removingPercentEncoding {
-                    let base64 = base64URLToBase64(scriptBase64URL)
-                    if let scriptData = Data(base64Encoded: base64) {
-                        config.scriptData = scriptData
-                    }
-                }
-                if let scriptName = components?.queryItems?.first(where: { $0.name == "script-name" })?.value {
-                    config.scriptName = scriptName
-                }
-                if config.scriptData == nil, let bundleID = config.bundleID,
-                   let scriptInfo = preferredScript(for: bundleID) {
-                    config.scriptData = scriptInfo.data
-                    config.scriptName = scriptInfo.name
-                }
-                if viewDidAppeared {
+            .onAppear {
+                viewDidAppeared = true
+                if let config = pendingJITEnableConfiguration {
                     startJITInBackground(bundleID: config.bundleID, pid: config.pid, scriptData: config.scriptData, scriptName: config.scriptName, triggeredByURLScheme: true)
-                } else {
-                    pendingJITEnableConfiguration = config
-                }
-            case "launch-app":
-                if let bundleId = components?.queryItems?.first(where: { $0.name == "bundle-id" })?.value {
-                    HapticFeedbackHelper.trigger()
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let success = JITEnableContext.shared.launchAppWithoutDebug(bundleId, logger: nil)
-                        DispatchQueue.main.async {
-                            let nameRaw = pinnedSystemAppNames[bundleId] ?? friendlyName(for: bundleId)
-                            let name = shortDisplayName(from: nameRaw)
-                            systemLaunchMessage = success
-                            ? String(format: "Launch requested: %@".localized, name)
-                            : String(format: "Failed to launch %@".localized, name)
-                            scheduleSystemToastDismiss()
-                        }
-                    }
-                }
-            default:
-                break
-            }
-        }
-        .onAppear {
-            viewDidAppeared = true
-            if let config = pendingJITEnableConfiguration {
-                startJITInBackground(bundleID: config.bundleID, pid: config.pid, scriptData: config.scriptData, scriptName: config.scriptName, triggeredByURLScheme: true)
-                pendingJITEnableConfiguration = nil
-            }
-        }
-    }
-    
-    // MARK: - Styled Sections
-    
-    private var welcomeCard: some View {
-        homeCard {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(greetingTitle)
-                    .font(.system(.title2, design: .rounded).weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(greetingSubtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-    
-    private var heartbeatCard: some View {
-        homeCard {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Heartbeat")
-                        .font(.headline.weight(.semibold))
-                    Text(heartbeatSubtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 6) {
-                        pillIconButton(icon: "play.fill", title: "Start") {
-                            startHeartbeatInBackground()
-                        }
-                        pillIconButton(icon: "arrow.clockwise", title: "Restart") {
-                            pubHeartBeat = false
-                            heartbeatOK = false
-                            startHeartbeatInBackground()
-                        }
-                    }
-                }
-                Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 6) {
-                    heartbeatStatusBadge
-                    statusLightsRow
+                    pendingJITEnableConfiguration = nil
                 }
             }
         }
     }
     
-    private var connectCard: some View {
-        homeCard {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Connect")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                
-                if shouldPromptForWiFi {
-                    statusBadge(
-                        icon: "wifi.slash",
-                        text: "Wi-Fi required",
-                        color: .orange
-                    )
-                }
-                
-                primaryActionControls
-                
-                if let info = connectionInfoMessage, !info.isEmpty {
-                    Text(info)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                
-                if isImportingFile {
-                    pairingImportProgressView
-                } else if showPairingFileMessage && pairingFileIsValid {
-                    pairingSuccessMessage
-                }
-            }
-        }
-    }
-    
-    // MARK: - Connection Setup Helpers
-    
-    @ViewBuilder
-    private var connectionStatusBadge: some View {
-        HStack {
-            Button {
-                refreshStatusTapped()
-            } label: {
-                iconOnlyStatusBadge(icon: "arrow.clockwise", text: "", color: .blue)
-            }.disabled(isConnectionCheckRunning)
+    // MARK: - Status Badges
 
-            if isConnectionCheckRunning {
-                statusBadge(icon: "clock.arrow.circlepath", text: "Checking…", color: .orange)
-            } else if allStatusIndicatorsGreen {
-                statusBadge(icon: "checkmark.circle.fill", text: "Ready", color: .green)
-            } else if connectionHasError {
-                statusBadge(icon: "exclamationmark.triangle.fill", text: "Needs attention", color: .yellow)
-            } else {
-                statusBadge(icon: "circle.lefthalf.filled", text: "Not ready", color: .yellow)
-            }
-        }
-    }
-    
     @ViewBuilder
     private var heartbeatStatusBadge: some View {
         switch heartbeatIndicatorStatus {
         case .success:
-            statusBadge(icon: "checkmark.circle.fill", text: "Connected", color: .green)
+            Text("Connected")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.green)
         case .running:
-            statusBadge(icon: "clock.arrow.circlepath", text: "Starting…", color: .orange)
+             Text("Starting…")
+                .font(.caption)
+                .foregroundColor(.orange)
         case .warning:
-            statusBadge(icon: "exclamationmark.triangle.fill", text: "Waiting", color: .yellow)
+            Text("Waiting")
+                .font(.caption)
+                .foregroundColor(.yellow)
         case .error:
-            statusBadge(icon: "xmark.circle.fill", text: "Error", color: .red)
+            Text("Error")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.red)
         case .idle:
-            statusBadge(icon: "pause.circle", text: "Idle", color: .secondary)
+            Text("Idle")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
     
@@ -506,69 +497,6 @@ struct HomeView: View {
                     .fill(color.opacity(0.15))
             )
             .foregroundStyle(color)
-    }
-    
-    private func iconOnlyStatusBadge(icon: String, text: String, color: Color) -> some View {
-        Label(text, systemImage: icon)
-            .font(.footnote.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Circle()
-                    .fill(color.opacity(0.15))
-            )
-            .foregroundStyle(color)
-            .labelStyle(.iconOnly)
-    }
-    
-    private var connectionHasError: Bool { false }
-    
-    private var allStatusIndicatorsGreen: Bool {
-        heartbeatIndicatorStatus == .success
-    }
-    
-    private var statusLightsRow: some View {
-        HStack(alignment: .center) {
-            ForEach(statusLights) { light in
-                if let action = light.action {
-                    Button(action: action) {
-                        StatusLightView(light: light)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!light.isEnabled)
-                } else {
-                    StatusLightView(light: light)
-                }
-            }
-        }.frame(maxWidth: .infinity)
-    }
-    
-    private var statusLights: [StatusLightData] {
-        [
-            StatusLightData(
-                type: .heartbeat,
-                title: "Heartbeat",
-                icon: "waveform.path.ecg",
-                status: heartbeatIndicatorStatus,
-                detail: heartbeatDetailText
-            )
-        ]
-    }
-    
-    private var wifiDetailText: String { "Connected" }
-    
-    private var heartbeatDetailText: String {
-        if heartbeatOK { return "Active" }
-        if pairingFileExists { return "Waiting" }
-        return "Pair first"
-    }
-    
-    private var refreshIndicatorStatus: StartupIndicatorStatus {
-        .success
-    }
-    
-    private func color(for indicator: StartupIndicatorStatus) -> Color {
-        indicator.tint
     }
     
     private func startWiFiMonitoring() {
@@ -606,34 +534,14 @@ struct HomeView: View {
         isCellularActive = false
     }
     
-    private var pairingStatusDescription: String {
-        if isValidatingPairingFile { return "Validating pairing file…" }
-        if pairingFileExists {
-            return "Pairing file imported and ready."
-        }
-        if pairingFilePresentOnDisk {
-            return "We found a pairing file on disk but couldn’t read it. Import a new one."
-        }
-        return "Import the pairing file generated from your trusted computer."
-    }
-    
-    private var wifiStatusDescription: String {
-        "Wi-Fi connected and ready."
-    }
-    
     private var isConnectionCheckRunning: Bool { false }
-    
-    private var wifiIndicatorStatus: StartupIndicatorStatus { .success }
-    
+
     private var heartbeatSubtitle: String {
         if heartbeatOK {
             return "Heartbeat is responding."
         }
         if !requiresLoopbackVPN && pairingFileExists {
             return "Waiting for a response."
-        }
-        if pairingFileLikelyInvalid {
-            return "Heartbeat is blocked because the pairing file looks invalid."
         }
         if !pairingFileExists {
             return "Import a pairing file to start the heartbeat."
@@ -652,41 +560,6 @@ struct HomeView: View {
         return .warning
     }
     
-    private var connectionCheckButtonLabel: some View {
-        compactControlButton(
-            icon: "waveform.path.ecg",
-            title: isConnectionCheckRunning ? "Checking…" : "Run Check",
-            showSpinner: isConnectionCheckRunning
-        )
-    }
-    
-    private var primaryActionControls: some View {
-        VStack(spacing: 8) {
-            Button(action: primaryActionTapped) {
-                whiteCardButtonLabel(
-                    icon: primaryActionIcon,
-                    title: primaryActionTitle,
-                    isLoading: isProcessing || isValidatingPairingFile
-                )
-            }
-            .disabled(isProcessing || isValidatingPairingFile)
-            
-            if pairingFileExists && enableAdvancedOptions && !pairingFileLikelyInvalid && primaryActionTitle == "Connect by App" {
-                Button(action: { showPIDSheet = true }) {
-                    secondaryButtonLabel(icon: "number.circle", title: "Connect by PID")
-                }
-                .disabled(isProcessing)
-            }
-        }
-    }
-    
-    private func refreshStatusTapped() {
-        runConnectionDiagnostics()
-        if pairingFileExists {
-            startHeartbeatInBackground()
-        }
-    }
-    
     private func runConnectionDiagnostics(autoStart: Bool = false) {
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = nil
@@ -700,224 +573,44 @@ struct HomeView: View {
         private var primaryActionTitle: String {
             if isValidatingPairingFile { return "Validating…" }
             if !pairingFileExists { return pairingFilePresentOnDisk ? "Import New Pairing File" : "Import Pairing File" }
-            if shouldPromptForWiFi { return "Connect to Wi-Fi" }
             if !ddiMounted { return "Mount Developer Disk Image" }
             return "Connect by App"
         }
-        
+
         private var primaryActionIcon: String {
             if isValidatingPairingFile { return "hourglass" }
             if !pairingFileExists { return pairingFilePresentOnDisk ? "arrow.clockwise" : "doc.badge.plus" }
-            if shouldPromptForWiFi { return "wifi.slash" }
             if !ddiMounted { return "externaldrive" }
             return "cable.connector.horizontal"
         }
         
+    // MARK: - Import Progress
+
     private var pairingImportProgressView: some View {
         VStack(spacing: 8) {
             HStack {
                 Text("Processing pairing file…")
-                    .font(.system(.caption, design: .rounded))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(Int(importProgress * 100))%")
-                    .font(.system(.caption, design: .rounded))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color(UIColor.tertiarySystemFill))
-                        .frame(height: 8)
-                    
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(accentColor)
-                        .frame(width: geo.size.width * CGFloat(importProgress), height: 8)
-                        .animation(.linear(duration: 0.25), value: importProgress)
-                }
-            }
-            .frame(height: 8)
+            ProgressView(value: Double(importProgress))
         }
         .accessibilityElement(children: .combine)
     }
         
     private var pairingSuccessMessage: some View {
-        HStack(spacing: 10) {
-            StatusDot(color: .green)
-            Text("Pairing file successfully imported")
-                .font(.system(.callout, design: .rounded))
-                .foregroundStyle(.green)
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 4)
-        .transition(.opacity)
+        Label("Pairing file successfully imported", systemImage: "checkmark.circle.fill")
+            .font(.system(.callout, design: .rounded))
+            .foregroundStyle(.green)
+            .padding(.top, 4)
+            .transition(.opacity)
     }
     
-    private func whiteCardButtonLabel(icon: String, title: String, isLoading: Bool = false) -> some View {
-        HStack(spacing: 10) {
-            if isLoading {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .tint(accentColor.contrastText())
-                    .frame(width: 20, height: 20)
-            } else {
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-            }
-            
-            Text(title)
-                .font(.system(.title3, design: .rounded).weight(.semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(accentColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .foregroundColor(accentColor.contrastText())
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-        )
-        .animation(.easeInOut(duration: 0.2), value: isLoading)
-    }
-    
-    private func secondaryButtonLabel(icon: String, title: String) -> some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-            Text(title)
-                .font(.system(.title3, design: .rounded).weight(.semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(UIColor.secondarySystemBackground).opacity(0.6))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .foregroundStyle(.primary)
-    }
-
-    private func pillIconButton(icon: String, title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                Text(title)
-                    .font(.system(.footnote, design: .rounded).weight(.semibold))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(minWidth: 92, alignment: .center)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-        
-        private var quickConnectCard: some View {
-            homeCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 8) {
-                        Text("Quick Connect")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        
-                    }
-                    
-                    Text("Favorites and recents stay within reach so you can enable debug with ease.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    
-                    if quickConnectItems.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Pin apps from the Installed Apps list to see them here.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            
-                            Button {
-                                isShowingInstalledApps = true
-                            } label: {
-                                secondaryButtonLabel(icon: "star", title: "Choose Favorites")
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    } else {
-                        VStack(spacing: 10) {
-                            ForEach(quickConnectItems) { item in
-                                QuickConnectRow(
-                                    item: item,
-                                    accentColor: accentColor,
-                                    isEnabled: canConnectByApp && !isProcessing,
-                                    action: {
-                                        HapticFeedbackHelper.trigger()
-                                        let scriptInfo = preferredScript(for: item.bundleID)
-                                        startJITInBackground(bundleID: item.bundleID,
-                                                             pid: nil,
-                                                             scriptData: scriptInfo?.data,
-                                                             scriptName: scriptInfo?.name,
-                                                             triggeredByURLScheme: false)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    
-                    if !canConnectByApp {
-                        Text("Finish the pairing and mounting steps above to enable quick launches.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        
-        private var launchShortcutsCard: some View {
-            homeCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Launch Shortcuts".localized)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    
-                    Text("Pin any app from Installed Apps and launch it here with ease.".localized)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    
-                    VStack(spacing: 10) {
-                        ForEach(pinnedLaunchItems) { item in
-                            SystemPinnedRow(
-                                item: item,
-                                accentColor: accentColor,
-                                isLaunching: launchingSystemApps.contains(item.bundleID),
-                                action: { launchSystemApp(item: item) },
-                                onRemove: { removePinnedSystemApp(bundleID: item.bundleID) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        
-        private var quickConnectItems: [QuickConnectItem] {
-            var seen = Set<String>()
-            var ordered: [QuickConnectItem] = []
-            for bundle in favoriteApps + recentApps {
-                guard seen.insert(bundle).inserted else { continue }
-                ordered.append(QuickConnectItem(bundleID: bundle, displayName: friendlyName(for: bundle)))
-                if ordered.count >= 4 { break }
-            }
-            return ordered
-        }
-        
         private var pinnedLaunchItems: [SystemPinnedItem] {
             pinnedSystemApps.compactMap { bundleID in
                 let raw = pinnedSystemAppNames[bundleID] ?? friendlyName(for: bundleID)
@@ -1017,143 +710,6 @@ struct HomeView: View {
             }
         }
         
-        private func homeCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-            content()
-                .padding(20)
-                .background(UIKitCardBackground())
-        }
-
-        // UIKit blur/shadow chrome keeps heavy effects out of SwiftUI while leaving layout in SwiftUI so the content still renders.
-        private struct UIKitCardBackground: UIViewRepresentable {
-            func makeUIView(context: Context) -> CardChromeView {
-                CardChromeView()
-            }
-
-            func updateUIView(_ uiView: CardChromeView, context: Context) {
-                uiView.setNeedsLayout()
-            }
-        }
-
-        private final class CardChromeView: UIView {
-            private let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
-            private let strokeLayer = CAShapeLayer()
-
-            override init(frame: CGRect) {
-                super.init(frame: frame)
-                backgroundColor = .clear
-                isUserInteractionEnabled = false
-
-                layer.cornerRadius = 20
-                layer.cornerCurve = .continuous
-                layer.masksToBounds = false
-                layer.shadowColor = UIColor.black.withAlphaComponent(0.15).cgColor
-                layer.shadowOpacity = 1
-                layer.shadowRadius = 12
-                layer.shadowOffset = CGSize(width: 0, height: 4)
-
-                blurView.translatesAutoresizingMaskIntoConstraints = false
-                blurView.clipsToBounds = true
-                blurView.layer.cornerRadius = 20
-                blurView.layer.cornerCurve = .continuous
-                addSubview(blurView)
-
-                NSLayoutConstraint.activate([
-                    blurView.leadingAnchor.constraint(equalTo: leadingAnchor),
-                    blurView.trailingAnchor.constraint(equalTo: trailingAnchor),
-                    blurView.topAnchor.constraint(equalTo: topAnchor),
-                    blurView.bottomAnchor.constraint(equalTo: bottomAnchor)
-                ])
-
-                strokeLayer.strokeColor = UIColor.white.withAlphaComponent(0.15).cgColor
-                strokeLayer.fillColor = UIColor.clear.cgColor
-                layer.addSublayer(strokeLayer)
-            }
-
-            required init?(coder: NSCoder) {
-                nil
-            }
-
-            override func layoutSubviews() {
-                super.layoutSubviews()
-                strokeLayer.frame = bounds
-                strokeLayer.path = UIBezierPath(roundedRect: bounds, cornerRadius: 20).cgPath
-                layer.shadowPath = strokeLayer.path
-            }
-        }
-        
-        private func compactControlButton(icon: String, title: String, showSpinner: Bool = false) -> some View {
-            HStack(spacing: 6) {
-                if showSpinner {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .controlSize(.small)
-                } else {
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                }
-                Text(title)
-                    .font(.caption.weight(.semibold))
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground).opacity(0.8))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
-        }
-        
-        private var tipsCard: some View {
-            homeCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Tips")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    
-                    if !pairingFileExists {
-                        tipRow(systemImage: "doc.badge.plus", title: "Pairing file required", message: "Import your device’s pairing file to begin.")
-                    }
-                    if pairingFileExists && !ddiMounted {
-                        tipRow(systemImage: "externaldrive.badge.exclamationmark", title: "Developer Disk Image not mounted", message: "Ensure your pairing is imported and valid, connect to Wi-Fi and force-restart StikDebug.")
-                    }
-                    tipRow(systemImage: "lock.shield", title: "Local only", message: "StikDebug runs entirely on-device. No data leaves your device.")
-                    
-                    Divider().background(Color.white.opacity(0.1))
-                    
-                    Button {
-                        if let url = URL(string: "https://github.com/StephenDev0/StikDebug-Guide/blob/main/pairing_file.md") {
-                            UIApplication.shared.open(url)
-                        }
-                    } label: {
-                        HStack(alignment: .center, spacing: 12) {
-                            Image(systemName: "questionmark.circle")
-                                .foregroundStyle(accentColor)
-                                .font(.system(size: 18, weight: .semibold))
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Pairing File Guide")
-                                    .font(.subheadline.weight(.semibold))
-                                Text("Step-by-step instructions from the community wiki.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        
         private func tipRow(systemImage: String, title: String, message: String) -> some View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: systemImage)
@@ -1173,18 +729,6 @@ struct HomeView: View {
         
         private func primaryActionTapped() {
             guard !isValidatingPairingFile else { return }
-            if pairingFileLikelyInvalid {
-                if shouldPromptForWiFi {
-                    showAlert(
-                        title: "Wi-Fi Required",
-                        message: "Connect to Wi-Fi.",
-                        showOk: true
-                    ) { _ in }
-                } else {
-                    isShowingPairingFilePicker = true
-                }
-                return
-            }
             if !ddiMounted {
                 showAlert(title: "Device Not Mounted".localized, message: "The Developer Disk Image has not been mounted yet. Check in settings for more information.".localized, showOk: true) { _ in }
                 return
@@ -1207,8 +751,6 @@ struct HomeView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
-                    .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 3)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .padding(.bottom, 30)
             }
@@ -1455,91 +997,6 @@ struct HomeView: View {
             return base64
         }
         
-        private struct StatusDot: View {
-            var color: Color
-            @Environment(\.colorScheme) private var colorScheme
-            var body: some View {
-                ZStack {
-                    Circle().fill(color.opacity(0.25)).frame(width: 20, height: 20)
-                    Circle().fill(color).frame(width: 12, height: 12)
-                        .shadow(color: color.opacity(0.6), radius: 4, x: 0, y: 0)
-                }
-                .overlay(
-                    Circle().stroke(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.1), lineWidth: 0.5)
-                )
-            }
-        }
-        
-        private struct StatusGlyph: View {
-            let icon: String
-            let tint: Color
-            var size: CGFloat = 48
-            var iconSize: CGFloat = 22
-            
-            var body: some View {
-                ZStack {
-                    Circle()
-                        .fill(tint.opacity(0.18))
-                        .frame(width: size, height: size)
-                    
-                    Image(systemName: icon)
-                        .font(.system(size: iconSize, weight: .semibold, design: .rounded))
-                        .foregroundStyle(tint)
-                }
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
-                )
-            }
-        }
-        
-        private struct QuickConnectRow: View {
-            let item: QuickConnectItem
-            let accentColor: Color
-            let isEnabled: Bool
-            let action: () -> Void
-            
-            var body: some View {
-                Button(action: action) {
-                    HStack(spacing: 14) {
-                        QuickAppBadge(title: item.displayName, accentColor: accentColor)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.displayName)
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                            
-                            Text(item.bundleID)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .textSelection(.enabled)
-                        }
-                        
-                        Spacer(minLength: 0)
-                        
-                        Image(systemName: "bolt.horizontal.circle.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(isEnabled ? accentColor : Color.secondary)
-                    }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color(UIColor.secondarySystemBackground).opacity(isEnabled ? 0.65 : 0.35))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(!isEnabled)
-                .opacity(isEnabled ? 1 : 0.55)
-            }
-        }
         
         private struct SystemPinnedRow: View {
             let item: SystemPinnedItem
@@ -1547,60 +1004,41 @@ struct HomeView: View {
             let isLaunching: Bool
             var action: () -> Void
             var onRemove: () -> Void
-            
+
             var body: some View {
                 Button(action: action) {
                     HStack(spacing: 14) {
                         QuickAppBadge(title: item.displayName, accentColor: accentColor)
-                        
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.displayName)
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                            
                             Text(item.bundleID)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
-                                .textSelection(.enabled)
                         }
-                        
+
                         Spacer(minLength: 0)
-                        
+
                         if isLaunching {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(accentColor)
+                            ProgressView().controlSize(.small).tint(accentColor)
                         } else {
                             Image(systemName: "play.fill")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(accentColor)
                         }
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color(UIColor.secondarySystemBackground).opacity(0.6))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
                 }
                 .buttonStyle(.plain)
                 .disabled(isLaunching)
                 .contextMenu {
-                    Button("Remove from Home".localized, systemImage: "star.slash") {
-                        onRemove()
-                    }
+                    Button("Remove from Home".localized, systemImage: "star.slash") { onRemove() }
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        onRemove()
-                    } label: {
+                    Button(role: .destructive) { onRemove() } label: {
                         Label("Remove".localized, systemImage: "trash")
                     }
                 }
@@ -1631,97 +1069,6 @@ struct HomeView: View {
             }
         }
         
-        private struct StatusLightView: View {
-            let light: StatusLightData
-            
-            var body: some View {
-                let tint = light.tintOverride ?? light.status.tint
-                VStack(spacing: 6) {
-                    ZStack {
-                        Circle()
-                            .fill(tint.opacity(0.18))
-                            .frame(width: 48, height: 48)
-                        Image(systemName: light.icon)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(tint)
-                    }
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
-                            .frame(width: 48, height: 48)
-                    )
-                    .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: light.indicatorIconName ?? light.status.iconName)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(light.indicatorColor ?? light.status.symbolColor)
-                            .padding(4)
-                            .background(
-                                Circle()
-                                    .fill(Color(.systemBackground))
-                                    .shadow(color: .black.opacity(0.12), radius: 1.5, x: 0, y: 1)
-                            )
-                            .offset(x: 6, y: 6)
-                    }
-                    
-                    VStack(spacing: 0) {
-                        Text(light.title)
-                            .font(.caption2.weight(.semibold))
-                        Text(light.detail)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(width: 80)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(light.title) status")
-                .accessibilityValue("\(light.detail). \(light.status.accessibilityDescription)")
-            }
-        }
-        
-        private struct StatusLightData: Identifiable {
-            let id = UUID()
-            let type: StatusLightType
-            let title: String
-            let icon: String
-            let status: StartupIndicatorStatus
-            let detail: String
-            let action: (() -> Void)?
-            let isEnabled: Bool
-            let indicatorIconName: String?
-            let indicatorColor: Color?
-            let tintOverride: Color?
-            
-            init(type: StatusLightType,
-                 title: String,
-                 icon: String,
-                 status: StartupIndicatorStatus,
-                 detail: String,
-                 action: (() -> Void)? = nil,
-                 isEnabled: Bool = true,
-                 indicatorIconName: String? = nil,
-                 indicatorColor: Color? = nil,
-                 tintOverride: Color? = nil) {
-                self.type = type
-                self.title = title
-                self.icon = icon
-                self.status = status
-                self.detail = detail
-                self.action = action
-                self.isEnabled = isEnabled
-                self.indicatorIconName = indicatorIconName
-                self.indicatorColor = indicatorColor
-                self.tintOverride = tintOverride
-            }
-        }
-        
-        private enum StatusLightType {
-            case ddi
-            case wifi
-            case heartbeat
-            case refresh
-        }
-        
         private struct PairingFileSignature: Equatable {
             let modificationDate: Date?
             let fileSize: UInt64
@@ -1736,62 +1083,22 @@ struct HomeView: View {
         }
         
         private enum StartupIndicatorStatus: Equatable {
-            case idle
-            case running
-            case success
-            case warning
-            case error
-            
-            var iconName: String {
-                switch self {
-                case .success: return "checkmark.circle.fill"
-                case .warning: return "exclamationmark.triangle.fill"
-                case .error: return "xmark.circle.fill"
-                case .idle: return "circle"
-                case .running: return "clock.arrow.circlepath"
-                }
-            }
-            
-            var tint: Color {
-                switch self {
-                case .success: return .green
-                case .warning: return .yellow
-                case .error: return .red
-                case .idle: return .secondary
-                case .running: return .orange
-                }
-            }
-            
-            var symbolColor: Color {
-                switch self {
-                case .success: return .green
-                case .warning: return .orange
-                case .error: return .red
-                case .idle: return .secondary
-                case .running: return .blue
-                }
-            }
-            
-            var accessibilityDescription: String {
-                switch self {
-                case .success: return "Success"
-                case .warning: return "Warning"
-                case .error: return "Error"
-                case .idle: return "Idle"
-                case .running: return "In progress"
-                }
-            }
+            case idle, running, success, warning, error
         }
-        private struct QuickConnectItem: Identifiable {
+        private struct SystemPinnedItem: Identifiable {
             let bundleID: String
             let displayName: String
             var id: String { bundleID }
         }
         
-        private struct SystemPinnedItem: Identifiable {
-            let bundleID: String
-            let displayName: String
-            var id: String { bundleID }
+        private struct SafariView: UIViewControllerRepresentable {
+            let url: URL
+            
+            func makeUIViewController(context: Context) -> SFSafariViewController {
+                return SFSafariViewController(url: url)
+            }
+            
+            func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
         }
         
         // MARK: - Connect-by-PID Sheet (minus/plus removed)
@@ -1813,129 +1120,84 @@ struct HomeView: View {
             private let capsuleHeight: CGFloat = 40
             
             var body: some View {
-                NavigationView {
-                    ZStack {
-                        Color.clear.ignoresSafeArea()
-                        
-                        ScrollView {
-                            VStack(spacing: 20) {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    Text("Enter a Process ID").font(.headline).foregroundColor(.primary)
-                                    
-                                    TextField("e.g. 1234", text: $pidText)
-                                        .keyboardType(.numberPad)
-                                        .textContentType(.oneTimeCode)
-                                        .font(.system(.title3, design: .rounded))
-                                        .padding(12)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                                .fill(.ultraThinMaterial)
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                                        )
-                                        .focused($focused)
-                                        .onChange(of: pidText) { _, newVal in validate(newVal) }
-                                    
-                                    // Paste + Clear row
-                                    HStack(spacing: 10) {
-                                        CapsuleButton(systemName: "doc.on.clipboard", title: "Paste", height: capsuleHeight) {
-                                            if let n = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                               let v = Int(n), v > 0 {
-                                                pidText = String(v)
-                                                validate(pidText)
-                                                onPasteCopyToast()
-                                            } else {
-                                                errorText = "No valid PID on the clipboard."
-                                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                NavigationStack {
+                    Form {
+                        Section {
+                            TextField("e.g. 1234", text: $pidText)
+                                .keyboardType(.numberPad)
+                                .textContentType(.oneTimeCode)
+                                .font(.system(.title3, design: .rounded))
+                                .focused($focused)
+                                .onChange(of: pidText) { _, newVal in validate(newVal) }
+
+                            HStack(spacing: 10) {
+                                CapsuleButton(systemName: "doc.on.clipboard", title: "Paste", height: capsuleHeight) {
+                                    if let n = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                       let v = Int(n), v > 0 {
+                                        pidText = String(v)
+                                        validate(pidText)
+                                        onPasteCopyToast()
+                                    } else {
+                                        errorText = "No valid PID on the clipboard."
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    }
+                                }
+                                CapsuleButton(systemName: "xmark", title: "Clear", height: capsuleHeight) {
+                                    pidText = ""
+                                    errorText = nil
+                                }
+                            }
+
+                            if let errorText {
+                                Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.footnote)
+                                    .foregroundStyle(.orange)
+                            }
+                        } header: {
+                            Text("Enter a Process ID")
+                        }
+
+                        if !recentPIDs.isEmpty {
+                            Section("Recents") {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(recentPIDs, id: \.self) { pid in
+                                            Button {
+                                                pidText = String(pid); validate(pidText)
+                                            } label: {
+                                                Text("#\(pid)")
+                                                    .font(.footnote.weight(.semibold))
+                                                    .padding(.vertical, 6).padding(.horizontal, 10)
+                                                    .background(Capsule(style: .continuous).fill(Color(UIColor.tertiarySystemBackground)))
                                             }
-                                        }
-                                        
-                                        CapsuleButton(systemName: "xmark", title: "Clear", height: capsuleHeight) {
-                                            pidText = ""
-                                            errorText = nil
-                                        }
-                                    }
-                                    
-                                    
-                                    if let errorText {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "exclamationmark.triangle.fill").font(.footnote)
-                                            Text(errorText).font(.footnote)
-                                        }
-                                        .foregroundColor(.orange)
-                                        .transition(.opacity)
-                                    }
-                                    
-                                    if !recentPIDs.isEmpty {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            Text("Recents")
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundColor(.secondary)
-                                            ScrollView(.horizontal, showsIndicators: false) {
-                                                HStack(spacing: 8) {
-                                                    ForEach(recentPIDs, id: \.self) { pid in
-                                                        Button {
-                                                            pidText = String(pid); validate(pidText)
-                                                        } label: {
-                                                            Text("#\(pid)")
-                                                                .font(.footnote.weight(.semibold))
-                                                                .padding(.vertical, 6)
-                                                                .padding(.horizontal, 10)
-                                                                .background(
-                                                                    Capsule(style: .continuous)
-                                                                        .fill(Color(UIColor.tertiarySystemBackground))
-                                                                )
-                                                        }
-                                                        .contextMenu {
-                                                            Button(role: .destructive) {
-                                                                removeRecent(pid)
-                                                            } label: { Label("Remove", systemImage: "trash") }
-                                                        }
-                                                    }
+                                            .buttonStyle(.plain)
+                                            .contextMenu {
+                                                Button(role: .destructive) { removeRecent(pid) } label: {
+                                                    Label("Remove", systemImage: "trash")
                                                 }
                                             }
                                         }
                                     }
-                                    
-                                    Button {
-                                        guard let pid = Int(pidText), pid > 0 else { return }
-                                        onConnect(pid)
-                                        addRecent(pid)
-                                        dismiss()
-                                    } label: {
-                                        HStack {
-                                            Image(systemName: "bolt.horizontal.circle").font(.system(size: 20))
-                                            Text("Connect")
-                                                .font(.system(.title3, design: .rounded))
-                                                .fontWeight(.semibold)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 14)
-                                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                        .foregroundColor(Color.accentColor.contrastText())
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-                                        )
-                                    }
-                                    .disabled(!isValid)
-                                    .padding(.top, 8)
+                                    .padding(.vertical, 4)
                                 }
-                                .padding(20)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-                                        )
-                                )
-                                .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 30)
+                        }
+
+                        Section {
+                            Button {
+                                guard let pid = Int(pidText), pid > 0 else { return }
+                                onConnect(pid)
+                                addRecent(pid)
+                                dismiss()
+                            } label: {
+                                Label("Connect", systemImage: "bolt.horizontal.circle")
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .fontWeight(.semibold)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!isValid)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         }
                     }
                     .navigationTitle("Connect by PID")
@@ -1943,21 +1205,6 @@ struct HomeView: View {
                     .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } } }
                     .onAppear { focused = true }
                 }
-            }
-            
-            // Small glassy square icon button
-            private func iconSquareButton(systemName: String, action: @escaping () -> Void) -> some View {
-                Button(action: action) {
-                    Image(systemName: systemName)
-                        .font(.headline)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(UIColor.tertiarySystemBackground))
-                        )
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
             }
             
             private func validate(_ text: String) {

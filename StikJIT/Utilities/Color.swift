@@ -5,85 +5,58 @@
 //  Created by Stephen on 3/27/25.
 //
 
-
 import SwiftUI
 
 extension Color {
     func toHex() -> String? {
-        let components = UIColor(self).cgColor.components
-        let r = Float(components?[0] ?? 0)
-        let g = Float(components?[1] ?? 0)
-        let b = Float(components?[2] ?? 0)
-        let hex = String(format: "%02lX%02lX%02lX", lroundf(r * 255), lroundf(g * 255), lroundf(b * 255))
-        return "#" + hex
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+        guard UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a) else { return nil }
+        return String(format: "#%02lX%02lX%02lX",
+                      lroundf(Float(r) * 255),
+                      lroundf(Float(g) * 255),
+                      lroundf(Float(b) * 255))
     }
-    
+
     init?(hex: String) {
-        if hex.isEmpty || hex.count < 2 {
-            return nil
-        }
-        
-        let r, g, b: CGFloat
-        
-        if hex.hasPrefix("#") && hex.count >= 7 {
-            let start = hex.index(hex.startIndex, offsetBy: 1)
-            let hexColor = String(hex[start...])
-            
-            if hexColor.count == 6, let hexNumber = Int(hexColor, radix: 16) {
-                r = CGFloat((hexNumber & 0xff0000) >> 16) / 255
-                g = CGFloat((hexNumber & 0x00ff00) >> 8) / 255
-                b = CGFloat(hexNumber & 0x0000ff) / 255
-                self.init(red: r, green: g, blue: b)
-                return
-            }
-        }
-        
-        return nil
+        let raw = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard raw.count == 6, let hexNumber = Int(raw, radix: 16) else { return nil }
+        self.init(
+            red:   CGFloat((hexNumber & 0xff0000) >> 16) / 255.0,
+            green: CGFloat((hexNumber & 0x00ff00) >> 8)  / 255.0,
+            blue:  CGFloat( hexNumber & 0x0000ff)         / 255.0
+        )
     }
+
+    // MARK: - Adaptive accent
+
+    static func dynamicAccentColor(opacity: Double = 0.8) -> Color {
+        let hex = UserDefaults.standard.string(forKey: "customAccentColor") ?? ""
+        return (hex.isEmpty ? .blue : (Color(hex: hex) ?? .blue)).opacity(opacity)
+    }
+
+    // MARK: - Contrast helpers
+
+    /// True when the colour's perceived luminance is below 50 %.
+    func isDark() -> Bool {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (0.299 * r + 0.587 * g + 0.114 * b) < 0.5
+    }
+
+    /// Black or white, whichever reads better on top of `self`.
+    func contrastText() -> Color { isDark() ? .white : .black }
 }
 
-extension Color {
-    static let primaryBackground = Color.black
-    static let cardBackground = Color.white.opacity(0.2)
-    
-    // Instead of a static color, provide a function that gets the current accent color
-    static func dynamicAccentColor(opacity: Double = 0.8) -> Color {
-        let colorHex = UserDefaults.standard.string(forKey: "customAccentColor") ?? ""
-        if colorHex.isEmpty {
-            return Color.blue.opacity(opacity)
-        } else {
-            return (Color(hex: colorHex) ?? .blue).opacity(opacity)
-        }
-    }
-    
-    // For backward compatibility
-    static var cardBackground2: Color {
-        return dynamicAccentColor(opacity: 0.8)
-    }
-    
-    static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.7)
-    
-    // Determine if a color is dark or light to decide text color
-    func isDark() -> Bool {
-        let uiColor = UIColor(self)
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-        
-        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        
-        // Calculate perceived brightness using the formula for luminance
-        // 0.299*R + 0.587*G + 0.114*B
-        let brightness = (0.299 * red) + (0.587 * green) + (0.114 * blue)
-        
-        // Return true if the color is dark (brightness < 0.5)
-        return brightness < 0.5
-    }
-    
-    // Returns black or white depending on the background brightness
-    func contrastText() -> Color {
-        return self.isDark() ? .white : .black
+// MARK: - Array<Color> helpers (shared across the app)
+
+extension Array where Element == Color {
+    /// Guarantees at least two stops so `Gradient` is always valid.
+    func ensureMinimumCount() -> [Color] {
+        if isEmpty { return [.blue, .purple] }
+        if count == 1 { return [self[0], self[0].opacity(0.6)] }
+        return self
     }
 }

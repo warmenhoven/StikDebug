@@ -197,16 +197,20 @@ NSDictionary<NSString*, NSString*>* list_hidden_system_apps(IdeviceProviderHandl
 
 UIImage* getAppIcon(IdeviceProviderHandle* provider, NSString* bundleID, NSString** error) {
     SpringBoardServicesClientHandle *client = NULL;
-    if (springboard_services_connect(provider, &client)) {
-        *error = @"Failed to connect to SpringBoard Services";
+    IdeviceFfiError *err = springboard_services_connect(provider, &client);
+    if (err) {
+        *error = [NSString stringWithUTF8String:err->message ?: "Failed to connect to SpringBoard Services"];
+        idevice_error_free(err);
         return nil;
     }
 
     void *pngData = NULL;
     size_t dataLen = 0;
-    if (springboard_services_get_icon(client, [bundleID UTF8String], &pngData, &dataLen)) {
+    err = springboard_services_get_icon(client, [bundleID UTF8String], &pngData, &dataLen);
+    if (err) {
+        *error = [NSString stringWithUTF8String:err->message ?: "Failed to get app icon"];
+        idevice_error_free(err);
         springboard_services_free(client);
-        *error = @"Failed to get app icon";
         return nil;
     }
 

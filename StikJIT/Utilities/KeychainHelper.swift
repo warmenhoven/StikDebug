@@ -12,24 +12,30 @@ final class KeychainHelper {
     private init() {}
 
     func save(password: String, forKey key: String) {
-        let pwData = password.data(using: .utf8)!
+        guard let pwData = password.data(using: .utf8) else { return }
 
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrAccount as String: key]
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
         SecItemDelete(query as CFDictionary)
 
-        let add: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                  kSecAttrAccount as String: key,
-                                  kSecValueData as String: pwData,
-                                  kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: pwData,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
         SecItemAdd(add as CFDictionary, nil)
     }
 
     func readPassword(forKey key: String) -> String? {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrAccount as String: key,
-                                    kSecReturnData as String: true,
-                                    kSecMatchLimit as String: kSecMatchLimitOne]
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
         var out: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &out)
         guard status == errSecSuccess, let data = out as? Data else { return nil }
@@ -37,8 +43,10 @@ final class KeychainHelper {
     }
 
     func deletePassword(forKey key: String) {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrAccount as String: key]
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
         SecItemDelete(query as CFDictionary)
     }
 }

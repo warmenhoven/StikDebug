@@ -254,7 +254,7 @@ final class DeviceLibraryStore: ObservableObject {
                 try fileManager.createDirectory(at: pairingsDirectory, withIntermediateDirectories: true)
             }
         } catch {
-            print("Failed to create DeviceLibrary directories: \(error)")
+            // Non-fatal: operations will fail gracefully if directories are missing
         }
     }
     
@@ -284,7 +284,6 @@ final class DeviceLibraryStore: ObservableObject {
             let decoded = try JSONDecoder().decode([DeviceProfileEntry].self, from: data)
             devices = decoded
         } catch {
-            print("Failed to load device library: \(error)")
             devices = []
         }
         if let activeDeviceID, !devices.contains(where: { $0.id == activeDeviceID }) {
@@ -299,7 +298,7 @@ final class DeviceLibraryStore: ObservableObject {
             let data = try JSONEncoder().encode(devices)
             try data.write(to: storageURL, options: .atomic)
         } catch {
-            print("Failed to save device library: \(error)")
+            // Persistence failure is non-fatal; in-memory state remains valid
         }
     }
     

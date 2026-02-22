@@ -38,9 +38,6 @@ struct MiniToolListView: View {
     @StateObject private var pendingToolCombo: ToolCombo = ToolCombo()
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @Environment(\.themeExpansionManager) private var themeExpansion
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
     private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
 
     private var filteredTools: [MiniToolBundle] {
@@ -50,50 +47,84 @@ struct MiniToolListView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
+            List {
+                if filteredTools.isEmpty {
+                    Section {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("No mini tools found", systemImage: "shippingbox")
+                                .foregroundStyle(.secondary)
+                            Text("Tap Import to add a tool.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } else {
+                    Section {
+                        ForEach(filteredTools) { tool in
+                            Button {
+                                handleRun(tool)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "shippingbox.fill")
+                                        .foregroundStyle(.blue)
+                                        .imageScale(.large)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(tool.name)
+                                            .font(.body.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        Text(tool.url.lastPathComponent)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer()
+                                    NavigationLink(destination: MiniToolEditorView(tool: tool)) {
+                                        EmptyView()
+                                    }
+                                    .frame(width: 0)
+                                    .opacity(0)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    pendingDelete = tool
+                                    showDeleteConfirmation = true
+                                } label: { Label("Delete", systemImage: "trash") }
 
-                ScrollView {
-                    VStack(spacing: 20) {
-                        headerCard
-
-                        if filteredTools.isEmpty {
-                            emptyCard
-                        } else {
-                            ForEach(filteredTools) { tool in
-                                toolRow(tool)
+                                NavigationLink(destination: MiniToolEditorView(tool: tool)) {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .tint(.blue)
+                            }
+                            .contextMenu {
+                                NavigationLink(destination: MiniToolEditorView(tool: tool)) {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                Button { copy(tool.url.lastPathComponent) } label: {
+                                    Label("Copy Name", systemImage: "doc.on.doc")
+                                }
+                                Button { copy(tool.url.path) } label: {
+                                    Label("Copy Path", systemImage: "folder")
+                                }
+                                Divider()
+                                Button(role: .destructive) {
+                                    pendingDelete = tool
+                                    showDeleteConfirmation = true
+                                } label: { Label("Delete", systemImage: "trash") }
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 30)
-                }
-
-                if store.isBusy {
-                    Color.black.opacity(0.35).ignoresSafeArea()
-                    ProgressView("Working…")
-                        .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-                                )
-                        )
-                        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-                }
-
-                if alertVisible {
-                    CustomErrorView(
-                        title: alertTitle,
-                        message: alertMessage,
-                        onDismiss: { alertVisible = false },
-                        messageType: .error
-                    )
                 }
             }
+            .listStyle(.insetGrouped)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search tools…"
+            )
             .navigationTitle("Mini Tools")
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -132,137 +163,25 @@ struct MiniToolListView: View {
             }
         }
         .preferredColorScheme(preferredScheme)
+        .overlay {
+            if store.isBusy {
+                Color.black.opacity(0.35).ignoresSafeArea()
+                ProgressView("Working…")
+                    .padding(16)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            if alertVisible {
+                CustomErrorView(
+                    title: alertTitle,
+                    message: alertMessage,
+                    onDismiss: { alertVisible = false },
+                    messageType: .error
+                )
+            }
+        }
         .sheet(isPresented: $showInfoSheet) {
             toolInfoSheet
         }
-    }
-
-    // MARK: - Cards
-
-    private var headerCard: some View {
-        VStack(spacing: 12) {
-            TextField("Search tools…", text: $searchText)
-                .padding(12)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                )
-
-            HStack(spacing: 12) {
-                WideGlassyButton(title: "Import", systemImage: "tray.and.arrow.down") {
-                    showImporter = true
-                }
-            }
-        }
-        .padding(20)
-        .background(glassyBackground)
-    }
-
-    private func toolRow(_ tool: MiniToolBundle) -> some View {
-        HStack(spacing: 12) {
-            Button {
-                handleRun(tool)
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "shippingbox.fill")
-                        .foregroundColor(.blue)
-                        .imageScale(.large)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(tool.name)
-                            .font(.body.weight(.medium))
-                            .lineLimit(1)
-                        Text(tool.url.lastPathComponent)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                }
-            }
-            .buttonStyle(.plain)
-
-            NavigationLink {
-                MiniToolEditorView(tool: tool)
-            } label: {
-                Image(systemName: "pencil")
-                    .foregroundColor(.primary)
-            }
-            .buttonStyle(.borderless)
-
-            Button(role: .destructive) {
-                pendingDelete = tool
-                showDeleteConfirmation = true
-            } label: {
-                Image(systemName: "trash")
-                    .foregroundColor(.red)
-            }
-            .buttonStyle(.borderless)
-
-        }
-        .padding(20)
-        .background(glassyBackground)
-        .contextMenu {
-            Button { copy(tool.url.lastPathComponent) } label: {
-                Label("Copy Name", systemImage: "doc.on.doc")
-            }
-            Button { copy(tool.url.path) } label: {
-                Label("Copy Path", systemImage: "folder")
-            }
-        }
-    }
-
-    private var emptyCard: some View {
-        VStack(spacing: 6) {
-            Label("No mini tools found", systemImage: "shippingbox")
-                .font(.subheadline.weight(.semibold))
-            Text("Tap New or Import to add a tool.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity)
-        .background(glassyBackground)
-    }
-
-    private var glassyBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: overlayColors()),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .opacity(0.32)
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-    }
-
-    private func overlayColors() -> [Color] {
-        let colors: [Color]
-        switch backgroundStyle {
-        case .staticGradient(let palette):
-            colors = palette
-        case .animatedGradient(let palette, _):
-            colors = palette
-        case .blobs(_, let background):
-            colors = background
-        case .particles(let particle, let background):
-            colors = background.isEmpty ? [particle, particle.opacity(0.4)] : background
-        case .customGradient(let palette):
-            colors = palette
-        case .adaptiveGradient(let light, let dark):
-            colors = colorScheme == .dark ? dark : light
-        }
-        if colors.count >= 2 { return colors }
-        if let first = colors.first { return [first, first.opacity(0.6)] }
-        return [Color.blue, Color.purple]
     }
 
     // MARK: - Actions
@@ -297,9 +216,7 @@ struct MiniToolListView: View {
             
             pendingToolCombo.info = info
             pendingToolCombo.tool = tool
-            print("set pendingToolInfo")
             showInfoSheet = true
-            print("pendingToolInfo = true")
         } catch {
             presentError(title: "Mini Tool", message: error.localizedDescription)
         }

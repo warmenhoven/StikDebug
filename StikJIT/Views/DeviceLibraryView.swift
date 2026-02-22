@@ -37,10 +37,9 @@ struct DeviceLibraryView: View {
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @Environment(\.themeExpansionManager) private var themeExpansion
     
-    private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
     private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
     private var accentColor: Color { themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue }
-    
+
     private var savedDevices: [DeviceProfileEntry] {
         store.devices.sorted { lhs, rhs in
             lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
@@ -59,45 +58,67 @@ struct DeviceLibraryView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        fullWidthCard {
-                            VStack(alignment: .leading, spacing: 16) {
-                                headerRow
-                                activeSummaryCard
-                                
-                                ForEach(displayedDevices) { device in
-                                    let isDefault = store.isDefaultDevice(device)
-                                    DeviceRow(device: device,
-                                              isActive: isDefault ? !store.isUsingExternalDevice : store.activeDeviceID == device.id,
-                                              isDefault: isDefault,
-                                              accentColor: accentColor,
-                                              onActivate: { activate(device: device) },
-                                              onEdit: isDefault ? nil : { editorMode = .edit(device) },
-                                              onDelete: isDefault ? nil : { delete(device: device) })
-                                    if device.id != displayedDevices.last?.id {
-                                        Divider()
-                                    }
-                                }
-                                
-                                footerText
-                            }
-                        }
+            List {
+                Section {
+                    Label {
+                        Text(activeSubtitle)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: store.isUsingExternalDevice
+                              ? "antenna.radiowaves.left.and.right"
+                              : "iphone")
+                            .foregroundStyle(accentColor)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 30)
+
+                    if let active = store.activeDevice {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(active.name).font(.headline)
+                            Text("IP: \(active.ipAddress)")
+                                .font(.footnote).foregroundStyle(.secondary)
+                            Text("Synced \(relativeDateFormatter.localizedString(for: active.lastUpdated, relativeTo: Date())).")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Button {
+                            activate(device: store.defaultLocalDevice)
+                        } label: {
+                            Label("Switch to This Device", systemImage: "arrow.uturn.backward")
+                        }
+                    } else {
+                        Text("Using the on-device pairing file. Saved devices appear below for quick switching.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Device Library")
+                } footer: {
+                    Text("Manage saved targets and switch between local or remote hardware.")
+                }
+
+                Section("Devices") {
+                    ForEach(displayedDevices) { device in
+                        let isDefault = store.isDefaultDevice(device)
+                        DeviceRow(
+                            device: device,
+                            isActive: isDefault ? !store.isUsingExternalDevice : store.activeDeviceID == device.id,
+                            isDefault: isDefault,
+                            accentColor: accentColor,
+                            onActivate: { activate(device: device) },
+                            onEdit: isDefault ? nil : { editorMode = .edit(device) },
+                            onDelete: isDefault ? nil : { delete(device: device) }
+                        )
+                    }
+                }
+
+                Section {
+                    Text("Saved devices keep their own pairing files so you can connect without copying them manually.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Devices")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        editorMode = .add
-                    } label: {
+                    Button { editorMode = .add } label: {
                         Label("Add Device", systemImage: "plus")
                     }
                 }
@@ -185,84 +206,6 @@ struct DeviceLibraryView: View {
         }
     }
 
-    @ViewBuilder
-    private func fullWidthCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        appGlassCard {
-            content()
-        }
-        .frame(maxWidth: .infinity)
-    }
-    
-    private var headerRow: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-
-                    Text("Device Library")
-                        .font(.system(.title, design: .rounded).weight(.bold))
-                }
-                Spacer()
-            }
-            
-            Text("Manage saved targets and switch between local or remote hardware.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-        }
-    }
-    
-    private var activeSummaryCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text(activeSubtitle)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            } icon: {
-                Image(systemName: store.isUsingExternalDevice ? "antenna.radiowaves.left.and.right" : "iphone")
-                    .foregroundColor(accentColor)
-            }
-            
-            if let active = store.activeDevice {
-                let relative = relativeDateFormatter.localizedString(for: active.lastUpdated, relativeTo: Date())
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(active.name)
-                        .font(.headline)
-                    Text("IP: \(active.ipAddress)")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                    Text("Synced \(relative).")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Button {
-                    activate(device: store.defaultLocalDevice)
-                } label: {
-                    Label("Switch to This Device", systemImage: "arrow.uturn.backward")
-                        .font(.footnote.weight(.semibold))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .buttonStyle(.borderedProminent)
-                .tint(accentColor)
-            } else {
-                Text("Using the on-device pairing file. Saved devices appear below for quick switching.")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.primary.opacity(0.05))
-        )
-    }
-    
-    private var footerText: some View {
-        Text("Saved devices keep their own pairing files so you can connect without copying them manually.")
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    
     private var relativeDateFormatter: RelativeDateTimeFormatter {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
@@ -278,87 +221,53 @@ private struct DeviceRow: View {
     let onActivate: () -> Void
     let onEdit: (() -> Void)?
     let onDelete: (() -> Void)?
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(device.name)
-                            .font(.headline)
-                        if isActive {
-                            Label("Active", systemImage: "checkmark.circle.fill")
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(accentColor.opacity(0.15), in: Capsule())
-                                .foregroundColor(accentColor)
-                        }
-                    }
-                    if isDefault {
-                        Text("Loopback IP: \(device.ipAddress)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Text("Uses the pairing file already stored on this device.")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("IP: \(device.ipAddress)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Text("Pairing: \(device.pairingFilename)")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                        if device.isTXM {
-                            Label("TXM Capable", systemImage: "shield.checkerboard")
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.green.opacity(0.15), in: Capsule())
-                                .foregroundColor(.green)
-                        } else {
-                            Label("Non-TXM", systemImage: "xmark.shield")
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.15), in: Capsule())
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                Spacer()
-                if onEdit != nil || onDelete != nil {
-                    Menu {
-                        Button("Use Device", action: onActivate)
-                        if let onEdit {
-                            Button("Edit Details", action: onEdit)
-                        }
-                        if let onDelete {
-                            Button(role: .destructive, action: onDelete) {
-                                Text("Delete Device")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.title3)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            
-            Button(action: onActivate) {
-                let title = isActive ? "Active" : (isDefault ? "Use Loopback" : "Use This Device")
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Image(systemName: isDefault ? "iphone" : "bolt.fill")
-                    Text(title).fontWeight(.semibold)
+                    Text(device.name).font(.headline)
+                    if isActive {
+                        Label("Active", systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(accentColor.opacity(0.15), in: Capsule())
+                            .foregroundStyle(accentColor)
+                    }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(isActive ? Color.gray.opacity(0.2) : accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .foregroundColor(isActive ? .secondary : accentColor)
+                if isDefault {
+                    Text("Loopback IP: \(device.ipAddress)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Text("Uses the pairing file already stored on this device.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    Text("IP: \(device.ipAddress)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Text("Pairing: \(device.pairingFilename)")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Label(device.isTXM ? "TXM Capable" : "Non-TXM",
+                          systemImage: device.isTXM ? "shield.checkerboard" : "xmark.shield")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background((device.isTXM ? Color.green : Color.secondary).opacity(0.15), in: Capsule())
+                        .foregroundStyle(device.isTXM ? Color.green : Color.secondary)
+                }
             }
-            .disabled(isActive)
+            Spacer()
+            if onEdit != nil || onDelete != nil {
+                Menu {
+                    Button("Use Device", action: onActivate)
+                    if let onEdit { Button("Edit Details", action: onEdit) }
+                    if let onDelete {
+                        Button(role: .destructive, action: onDelete) { Text("Delete Device") }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle").font(.title3).foregroundStyle(.secondary)
+                }
+            }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { if !isActive { onActivate() } }
     }
 }
 

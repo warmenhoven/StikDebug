@@ -154,69 +154,62 @@ struct ProfileView: View {
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @Environment(\.themeExpansionManager) private var themeExpansion
-    private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
     private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
     private var accentColor: Color { themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue }
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                ThemedBackground(style: backgroundStyle)
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        infoCard
+            List {
+                if profiles.isEmpty {
+                    Section {
+                        Text(working ? "Loading Profiles…" : "No profiles available.")
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 30)
+                } else {
+                    ForEach(sortedAppIds, id: \.self) { appId in
+                        if let appProfiles = groupedProfiles[appId] {
+                            Section {
+                                let displayProfiles: [Profile] = expandedAppIds.contains(appId)
+                                    ? appProfiles
+                                    : Array(appProfiles.prefix(1))
+                                ForEach(Array(displayProfiles.enumerated()), id: \.element.uuid) { pair in
+                                    profileEntryRow(profile: pair.element, isLatest: pair.offset == 0)
+                                }
+                                if appProfiles.count > 1 {
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            if expandedAppIds.contains(appId) {
+                                                expandedAppIds.remove(appId)
+                                            } else {
+                                                expandedAppIds.insert(appId)
+                                            }
+                                        }
+                                    } label: {
+                                        Text(expandedAppIds.contains(appId)
+                                             ? "Show Less"
+                                             : "Show \(appProfiles.count - 1) More…")
+                                            .font(.footnote)
+                                    }
+                                }
+                            } header: {
+                                Text(appId)
+                            }
+                        }
+                    }
                 }
-                
-                if alert {
-                    CustomErrorView(title: alertTitle,
-                                    message: alertMsg,
-                                    onDismiss: { alert = false },
-                                    messageType: alertSuccess ? .success : .error)
-                }
-                
-                if confirmRemove {
-                    CustomErrorView(
-                        title: "Confirm Removal",
-                        message: "Remove profile for \(removeTargetName) (UUID: \(removeTargetUUID))?\n**Apps associated with this profile may become unavailable.**",
-                        onDismiss: { confirmRemove = false },
-                        showButton: true,
-                        primaryButtonText: "Remove",
-                        secondaryButtonText: "Cancel",
-                        onPrimaryButtonTap: {
-                            Task { await removeProfile(uuid: removeTargetUUID) }
-                        },
-                        onSecondaryButtonTap: {
-                            // Just dismiss
-                        },
-                        showSecondaryButton: true,
-                        messageType: .info
-                    )
-                }
-                
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Profiles")
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        isImporterPresented = true
-                    } label: {
+                    Button { isImporterPresented = true } label: {
                         Label("Add", systemImage: "plus")
                     }
-                    
-                    Button {
-                        Task { await loadProfiles(force: true) }
-                    } label: {
+                    Button { Task { await loadProfiles(force: true) } } label: {
                         Label("Reload", systemImage: "arrow.clockwise")
                     }
-                    
                 }
             }
-            
             .onAppear { Task { await loadProfiles() } }
             .fileImporter(
                 isPresented: $isImporterPresented,
@@ -232,108 +225,65 @@ struct ProfileView: View {
                 defaultFilename: exportFileName
             ) { result in
                 switch result {
-                case .success(let url):
-                    print("Saved at \(url)")
-                case .failure(let error):
-                    print("Error: \(error.localizedDescription)")
+                case .success:
+                    break
+                case .failure:
+                    break
                 }
             }
         }
+        .tint(accentColor)
         .preferredColorScheme(preferredScheme)
+        .overlay {
+            if alert {
+                CustomErrorView(title: alertTitle,
+                                message: alertMsg,
+                                onDismiss: { alert = false },
+                                messageType: alertSuccess ? .success : .error)
+            }
+            if confirmRemove {
+                CustomErrorView(
+                    title: "Confirm Removal",
+                    message: "Remove profile for \(removeTargetName) (UUID: \(removeTargetUUID))?\n**Apps associated with this profile may become unavailable.**",
+                    onDismiss: { confirmRemove = false },
+                    showButton: true,
+                    primaryButtonText: "Remove",
+                    secondaryButtonText: "Cancel",
+                    onPrimaryButtonTap: { Task { await removeProfile(uuid: removeTargetUUID) } },
+                    onSecondaryButtonTap: { },
+                    showSecondaryButton: true,
+                    messageType: .info
+                )
+            }
+        }
     }
-    
-    // MARK: - UI Sections
-    
-    private var infoCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            
-            if profiles.isEmpty {
-                Text(working ? "Loading Profiles" : "No profile available")
-            } else {
-                ForEach(sortedAppIds, id: \.self) { appId in
-                    if let appProfiles = groupedProfiles[appId] {
-                        VStack(alignment: .leading, spacing: 8) {
-                            // App ID header with expand/collapse control
-                            HStack {
-                                Text(appId)
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                if appProfiles.count > 1 {
-                                    Button {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            if expandedAppIds.contains(appId) {
-                                                expandedAppIds.remove(appId)
-                                            } else {
-                                                expandedAppIds.insert(appId)
-                                            }
-                                        }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: expandedAppIds.contains(appId) ? "chevron.up" : "chevron.down")
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.top, appId != sortedAppIds.first ? 8 : 0)
-                            
-                            // Profiles for this app (only first if collapsed)
-                            let displayProfiles: [Profile] = expandedAppIds.contains(appId) ? appProfiles : Array(appProfiles.prefix(1))
-                            ForEach(Array(displayProfiles.enumerated()), id: \.element.uuid) { pair in
-                                let index = pair.offset
-                                let entry = pair.element
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(entry.appName).bold()
-                                        Text(entry.uuid).lineLimit(1)
-                                        Text("Expires: \(entry.formattedDate)")
-                                            .foregroundStyle(index == 0 ? entry.dateColor : Color.secondary)
-                                    }
-                                    .font(.caption.monospaced())
-                                    .foregroundColor(.secondary)
-                                    .textSelection(.enabled)
-                                    Spacer()
-                                    HStack(spacing: 10) {
-                                        profileActionButton(icon: "square.and.arrow.down", color: accentColor) {
-                                            saveProfile(profile: entry)
-                                        }
-                                        profileActionButton(icon: "trash", color: .refreshRed) {
-                                            removeProfilePrompt(entry: entry)
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                                if entry.uuid != displayProfiles.last?.uuid {
-                                    Divider().background(Color.white.opacity(0.08))
-                                }
-                            }
-                            .animation(.easeInOut(duration: 0.3), value: expandedAppIds)
-                        }
-                        
-                        // Divider between app groups
-                        if appId != sortedAppIds.last {
-                            Divider()
-                                .background(Color.white.opacity(0.12))
-                                .padding(.vertical, 4)
-                        }
-                    }
+
+    // MARK: - Row
+
+    private func profileEntryRow(profile: Profile, isLatest: Bool) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(profile.appName).bold()
+                Text(profile.uuid).lineLimit(1)
+                Text("Expires: \(profile.formattedDate)")
+                    .foregroundStyle(isLatest ? profile.dateColor : Color.secondary)
+            }
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+            Spacer()
+            HStack(spacing: 14) {
+                profileActionButton(icon: "square.and.arrow.down", color: accentColor) {
+                    saveProfile(profile: profile)
+                }
+                profileActionButton(icon: "trash", color: .refreshRed) {
+                    removeProfilePrompt(entry: profile)
                 }
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        .padding(.vertical, 2)
     }
-    
+
     private func profileActionButton(icon: String, color: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)

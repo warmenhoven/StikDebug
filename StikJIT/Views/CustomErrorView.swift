@@ -27,7 +27,6 @@ struct CustomErrorView: View {
     var showSecondaryButton: Bool = false
     var messageType: MessageType = .error
     
-    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     
     private var accentColor: Color {
@@ -68,17 +67,17 @@ struct CustomErrorView: View {
                 
                 Text(title)
                     .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
-                
+
                 Rectangle()
                     .frame(height: 1)
-                    .foregroundColor(colorScheme == .dark ? .white.opacity(0.2) : .black.opacity(0.2))
+                    .foregroundStyle(.primary.opacity(0.2))
                     .padding(.horizontal, 12)
-                
+
                 Text(LocalizedStringKey(message))
                     .font(.system(size: 15, design: .rounded))
-                    .foregroundColor(colorScheme == .dark ? .white.opacity(0.9) : .black.opacity(0.9))
+                    .foregroundStyle(.primary.opacity(0.9))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 12)
@@ -92,12 +91,12 @@ struct CustomErrorView: View {
                         }) {
                             Text(primaryButtonText)
                                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundColor(colorScheme == .dark ? .black : .white)
+                                .foregroundStyle(accentColor.contrastText())
                                 .frame(height: 38)
                                 .frame(maxWidth: .infinity)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10)
-                                        .fill(colorScheme == .dark ? Color.white : accentColor)
+                                        .fill(accentColor)
                                 )
                         }
                         
@@ -108,12 +107,12 @@ struct CustomErrorView: View {
                             }) {
                                 Text(secondaryButtonText)
                                     .font(.system(size: 16, weight: .medium, design: .rounded))
-                                    .foregroundColor(colorScheme == .dark ? .white : .gray)
+                                    .foregroundStyle(.secondary)
                                     .frame(height: 38)
                                     .frame(maxWidth: .infinity)
                                     .background(
                                         RoundedRectangle(cornerRadius: 10)
-                                            .fill(colorScheme == .dark ? Color.gray.opacity(0.3) : Color.gray.opacity(0.15))
+                                            .fill(Color(UIColor.secondarySystemFill))
                                     )
                             }
                         }
@@ -129,18 +128,13 @@ struct CustomErrorView: View {
             .frame(width: min(UIScreen.main.bounds.width - 80, 300))
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(colorScheme == .dark ? 
-                          Color(UIColor.systemGray6).opacity(0.95) : 
-                          Color(UIColor.systemGray6).opacity(0.95))
+                    .fill(Color(UIColor.systemGray6).opacity(0.95))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(colorScheme == .dark ? 
-                                   Color.white.opacity(0.2) : 
-                                   Color.black.opacity(0.1), 
-                                   lineWidth: 1)
+                            .stroke(Color.primary.opacity(0.15), lineWidth: 1)
                     )
             )
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.25 : 0.15), radius: 16, x: 0, y: 8)
+            .shadow(color: .black.opacity(0.2), radius: 16, x: 0, y: 8)
             .scaleEffect(scale)
             .opacity(opacity)
         }
