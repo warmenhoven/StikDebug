@@ -30,41 +30,11 @@ extension Color {
         )
     }
 
-    // MARK: - Adaptive accent
-
-    static func dynamicAccentColor(opacity: Double = 0.8) -> Color {
-        let hex = UserDefaults.standard.string(forKey: "customAccentColor") ?? ""
-        return (hex.isEmpty ? .blue : (Color(hex: hex) ?? .blue)).opacity(opacity)
-    }
-
-    // MARK: - Contrast helpers
-
-    /// True when the colour's perceived luminance is below 50 %.
-    func isDark() -> Bool {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
-        return (0.299 * r + 0.587 * g + 0.114 * b) < 0.5
-    }
-
-    /// Black or white, whichever reads better on top of `self`.
-    func contrastText() -> Color { isDark() ? .white : .black }
-    
     static var primaryBackground: Color {
         Color(UIColor.systemBackground)
     }
-    
+
     static var secondaryText: Color {
         Color(UIColor.secondaryLabel)
-    }
-}
-
-// MARK: - Array<Color> helpers (shared across the app)
-
-extension Array where Element == Color {
-    /// Guarantees at least two stops so `Gradient` is always valid.
-    func ensureMinimumCount() -> [Color] {
-        if isEmpty { return [.blue, .purple] }
-        if count == 1 { return [self[0], self[0].opacity(0.6)] }
-        return self
     }
 }

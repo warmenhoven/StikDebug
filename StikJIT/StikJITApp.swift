@@ -25,16 +25,8 @@ private func registerAdvancedOptionsDefault() {
 struct WelcomeSheetView: View {
     var onDismiss: (() -> Void)?
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    
-    private var accent: Color {
-        themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue
-    }
-    
     var body: some View {
         ZStack {
-            // Background now comes from global BackgroundContainer
             Color.clear.ignoresSafeArea()
             
             ScrollView {
@@ -56,7 +48,7 @@ struct WelcomeSheetView: View {
                         // App description
                         VStack(alignment: .leading, spacing: 6) {
                             Label("On‑device debugger", systemImage: "bolt.shield.fill")
-                                .foregroundColor(accent)
+                                .foregroundColor(.blue)
                                 .font(.headline)
                             Text("StikDebug is an on‑device debugger designed specifically for self‑developed apps. It helps streamline testing and troubleshooting without sending any data to external servers.")
                                 .font(.callout)
@@ -68,12 +60,12 @@ struct WelcomeSheetView: View {
                         Button(action: { onDismiss?() }) {
                             Text("Continue")
                                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundColor(accent.contrastText())
+                                .foregroundColor(.white)
                                 .frame(height: 44)
                                 .frame(maxWidth: .infinity)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(accent)
+                                        .fill(.blue)
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -109,7 +101,6 @@ struct WelcomeSheetView: View {
                 .padding(.vertical, 30)
             }
         }
-        // Inherit preferredColorScheme from BackgroundContainer (no local override)
     }
 }
 
@@ -219,11 +210,8 @@ private var heartbeatPendingShowUI = true
 @main
 struct HeartbeatApp: App {
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
-    @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @State private var showWelcomeSheet: Bool = false
     @StateObject private var mount = MountingProgress.shared
-    @StateObject private var themeExpansionManager = ThemeExpansionManager()
     @Environment(\.scenePhase) private var scenePhase   // Observe scene lifecycle
     @State private var shouldAttemptHeartbeatRestart = false
     
@@ -240,19 +228,6 @@ struct HeartbeatApp: App {
             method_exchangeImplementations(origMethod, fixMethod)
         }
         
-        // Initialize UIKit tint from stored accent at launch (defaults to blue until entitlements load)
-        HeartbeatApp.updateUIKitTint(customHex: customAccentColorHex, hasAccess: false)
-    }
-    
-    // Make this static so we can call it without capturing self in init
-    private static func updateUIKitTint(customHex: String, hasAccess: Bool) {
-        let color: UIColor
-        if hasAccess, !customHex.isEmpty, let swiftColor = Color(hex: customHex) {
-            color = UIColor(swiftColor)
-        } else {
-            color = .systemBlue
-        }
-        UIView.appearance().tintColor = color
     }
     
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
@@ -269,51 +244,32 @@ struct HeartbeatApp: App {
         }
     }
     
-    private var globalAccent: Color {
-        themeExpansionManager.resolvedAccentColor(from: customAccentColorHex)
-    }
-    
     var body: some Scene {
         WindowGroup {
-            BackgroundContainer {
-                MainTabView()
-                    .onAppear {
-                        Task {
-                            let fileManager = FileManager.default
-                            for item in ddiDownloadItems {
-                                let destinationURL = URL.documentsDirectory.appendingPathComponent(item.relativePath)
-                                if fileManager.fileExists(atPath: destinationURL.path) { continue }
-                                do {
-                                    try await downloadFile(from: item.urlString, to: destinationURL)
-                                } catch {
-                                    await MainActor.run {
-                                        showAlert(title: "An Error has Occurred", 
-                                                  message: "[Download DDI Error]: \(error.localizedDescription)", 
-                                                  showOk: true)
-                                    }
-                                    break
+            MainTabView()
+                .onAppear {
+                    Task {
+                        let fileManager = FileManager.default
+                        for item in ddiDownloadItems {
+                            let destinationURL = URL.documentsDirectory.appendingPathComponent(item.relativePath)
+                            if fileManager.fileExists(atPath: destinationURL.path) { continue }
+                            do {
+                                try await downloadFile(from: item.urlString, to: destinationURL)
+                            } catch {
+                                await MainActor.run {
+                                    showAlert(title: "An Error has Occurred",
+                                              message: "[Download DDI Error]: \(error.localizedDescription)",
+                                              showOk: true)
                                 }
+                                break
                             }
                         }
                     }
-            }
-            .themeExpansionManager(themeExpansionManager)
-            // Apply global tint to all SwiftUI views in this window
-            .tint(globalAccent)
+                }
             .onAppear {
-                // On first launch, present the welcome sheet.
                 if !hasLaunchedBefore {
                     showWelcomeSheet = true
                 }
-                HeartbeatApp.updateUIKitTint(customHex: customAccentColorHex,
-                                             hasAccess: themeExpansionManager.hasThemeExpansion)
-            }
-            .onChange(of: themeExpansionManager.hasThemeExpansion) { hasAccess in
-                HeartbeatApp.updateUIKitTint(customHex: customAccentColorHex, hasAccess: hasAccess)
-            }
-            .onChange(of: customAccentColorHex) { newHex in
-                HeartbeatApp.updateUIKitTint(customHex: newHex,
-                                             hasAccess: themeExpansionManager.hasThemeExpansion)
             }
             .onChange(of: scenePhase) { newPhase in
                 handleScenePhaseChange(newPhase)
@@ -547,7 +503,7 @@ func checkDeviceConnection(callback: @escaping (Bool, String?) -> Void) {
     }
 }
 
-public func showAlert(title: String, message: String, showOk: Bool, showTryAgain: Bool = false, primaryButtonText: String? = nil, messageType: MessageType = .error, completion: ((Bool) -> Void)? = nil) {
+public func showAlert(title: String, message: String, showOk: Bool, showTryAgain: Bool = false, primaryButtonText: String? = nil, completion: ((Bool) -> Void)? = nil) {
     DispatchQueue.main.async {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootViewController = scene.windows.first?.rootViewController else {

@@ -36,9 +36,6 @@ struct ScriptListView: View {
         return scripts.filter { $0.lastPathComponent.localizedCaseInsensitiveContains(searchText) }
     }
 
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
 
     var body: some View {
         NavigationStack {
@@ -142,8 +139,7 @@ struct ScriptListView: View {
                 }
             }
         }
-        .preferredColorScheme(preferredScheme)
-        .overlay {
+                .overlay {
             if isBusy {
                 Color.black.opacity(0.35).ignoresSafeArea()
                 ProgressView("Working…")

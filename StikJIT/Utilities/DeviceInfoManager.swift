@@ -166,9 +166,6 @@ struct DeviceInfoView: View {
         }
     }
     
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
 
     var body: some View {
         NavigationStack {
@@ -301,8 +298,7 @@ struct DeviceInfoView: View {
             .onAppear { if isPaired { mgr.initAndLoad() } }
             .onDisappear { mgr.cleanup() }
         }
-        .preferredColorScheme(preferredScheme)
-    }
+            }
 
     // MARK: - Copy / Share helpers
 

@@ -41,9 +41,6 @@ struct InstalledAppsListView: View {
     @Environment(\.dismiss) private var dismiss
     var onSelectApp: (String) -> Void
 
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
 
     private var currentSearchBinding: Binding<String> {
         Binding(
@@ -208,8 +205,7 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: launchFeedback?.id)
             }
         }
-        .preferredColorScheme(preferredScheme)
-        .onAppear {
+                .onAppear {
             prefetchedBundleIDs.removeAll()
             prefetchPriorityIcons()
         }
@@ -501,8 +497,6 @@ struct AppButton: View {
 
     @AppStorage("loadAppIconsOnJIT") private var loadAppIconsOnJIT = true
     @AppStorage("enableAdvancedOptions") private var enableAdvancedOptions = false
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
-    @Environment(\.themeExpansionManager) private var themeExpansion
 
     var onSelectApp: (String) -> Void
     let sharedDefaults: UserDefaults

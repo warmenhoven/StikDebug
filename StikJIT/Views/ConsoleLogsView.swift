@@ -14,7 +14,6 @@ struct ConsoleLogsView: View {
     @StateObject private var systemLogStream = SystemLogStream()
     @State private var selectedConsoleTab: ConsoleTab = .idevice
     @State private var jitScrollView: ScrollViewProxy? = nil
-    @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @State private var showingCustomAlert = false
     @State private var alertMessage = ""
     @State private var alertTitle = ""
@@ -30,14 +29,8 @@ struct ConsoleLogsView: View {
     @State private var syslogSearchText = ""
     @State private var showingSyslogSpeedSelector = false
     private let appLogRefreshInterval: TimeInterval = 3.0
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
     private let syslogIntervalOptions: [Double] = [0.0, 0.2, 0.5, 1.0, 1.5, 2.0]
 
-    private var accentColor: Color {
-        themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue
-    }
 
     private var filteredSyslogEntries: [SystemLogStream.Entry] {
         if syslogSearchText.isEmpty {
@@ -115,8 +108,7 @@ struct ConsoleLogsView: View {
                 Text("Choose how quickly new relay entries appear.")
             }
         }
-        .preferredColorScheme(preferredScheme)
-        .onDisappear {
+                .onDisappear {
             systemLogStream.stop()
         }
     }
@@ -369,7 +361,7 @@ struct ConsoleLogsView: View {
         case .error:
             return .red
         case .debug:
-            return accentColor
+            return .blue
         case .warning:
             return .orange
         }
@@ -587,7 +579,6 @@ struct ConsoleLogsView: View {
 struct ConsoleLogsView_Previews: PreviewProvider {
     static var previews: some View {
         ConsoleLogsView()
-            .themeExpansionManager(ThemeExpansionManager(previewUnlocked: true))
     }
 }
 

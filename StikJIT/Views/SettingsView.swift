@@ -16,14 +16,9 @@ struct SettingsView: View {
     @AppStorage(UserDefaults.Keys.txmOverride) private var overrideTXMDetection = false
     @AppStorage("keepAliveAudio") private var keepAliveAudio = true
     @AppStorage("keepAliveLocation") private var keepAliveLocation = true
-    @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @AppStorage("customTargetIP") private var customTargetIP = ""
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @AppStorage(TabConfiguration.storageKey) private var enabledTabIdentifiers = TabConfiguration.defaultRawValue
     @AppStorage("primaryTabSelection") private var tabSelection = TabConfiguration.defaultIDs.first ?? "home"
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
-    private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
     
     @State private var isShowingPairingFilePicker = false
     @State private var showPairingFileMessage = false
@@ -36,24 +31,12 @@ struct SettingsView: View {
     @State private var ddiStatusMessage: String = ""
     @State private var ddiResultMessage: (text: String, isError: Bool)?
 
-    @State private var showingDisplayView = false
 
     private var appVersion: String {
         let marketingVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         return marketingVersion
     }
     
-    private var accentColor: Color {
-        themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue
-    }
-
-    private var currentThemeName: String {
-        AppTheme(rawValue: appThemeRaw)?.displayName ?? "Default"
-    }
-
-    private var accentColorDescription: String {
-        customAccentColorHex.isEmpty ? "System Blue" : customAccentColorHex.uppercased()
-    }
     struct TabOption: Identifiable {
         let id: String
         let title: String
@@ -184,7 +167,7 @@ struct SettingsView: View {
                     }.foregroundStyle(.primary).disabled(isRedownloadingDDI)
                     if isRedownloadingDDI {
                         VStack(alignment: .leading, spacing: 4) {
-                            ProgressView(value: ddiDownloadProgress, total: 1.0).tint(accentColor)
+                            ProgressView(value: ddiDownloadProgress, total: 1.0)
                             Text(ddiStatusMessage).font(.caption).foregroundStyle(.secondary)
                         }
                     } else if let result = ddiResultMessage {
@@ -215,9 +198,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-        .tint(accentColor)
-        .preferredColorScheme(preferredScheme)
-        .fileImporter(
+                        .fileImporter(
             isPresented: $isShowingPairingFilePicker,
             allowedContentTypes: [UTType(filenameExtension: "mobiledevicepairing", conformingTo: .data)!, .propertyList],
             allowsMultipleSelection: false
@@ -445,6 +426,5 @@ struct TabCustomizationView: View {
 struct ConsoleLogsView_Preview: PreviewProvider {
     static var previews: some View {
         ConsoleLogsView()
-            .themeExpansionManager(ThemeExpansionManager(previewUnlocked: true))
     }
 }

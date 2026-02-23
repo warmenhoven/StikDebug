@@ -19,23 +19,11 @@ extension Notification.Name {
 }
 
 struct MainTabView: View {
-    @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @AppStorage(TabConfiguration.storageKey) private var enabledTabIdentifiers: String = TabConfiguration.defaultRawValue
     @AppStorage("primaryTabSelection") private var selection: String = TabConfiguration.defaultIDs.first ?? "home"
     @State private var switchObserver: Any?
     @State private var detachedTab: TabDescriptor?
     @State private var didSetInitialHome = false
-
-    @Environment(\.themeExpansionManager) private var themeExpansion
-
-    private var accentColor: Color {
-        themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue
-    }
-    
-    private var preferredScheme: ColorScheme? {
-        themeExpansion?.preferredColorScheme(for: appThemeRaw)
-    }
 
     private var configurableTabs: [TabDescriptor] {
         var tabs: [TabDescriptor] = [
@@ -94,9 +82,6 @@ struct MainTabView: View {
                         .tag(descriptor.id)
                 }
             }
-            .id((themeExpansion?.hasThemeExpansion == true) ? customAccentColorHex : "default-accent")
-            .tint(accentColor)
-            .preferredColorScheme(preferredScheme)
             .onAppear {
                 enabledTabIdentifiers = TabConfiguration.serialize(TabConfiguration.sanitize(raw: enabledTabIdentifiers))
                 ensureSelectionIsValid()
@@ -146,6 +131,5 @@ struct MainTabView: View {
 struct MainTabView_Previews: PreviewProvider {
     static var previews: some View {
         MainTabView()
-            .themeExpansionManager(ThemeExpansionManager(previewUnlocked: true))
     }
 }

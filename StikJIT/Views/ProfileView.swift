@@ -132,11 +132,6 @@ struct ProfileView: View {
     @State private var removeTargetName: String = ""
     @State private var removeTargetUUID: String = ""
     
-    @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
-    @Environment(\.themeExpansionManager) private var themeExpansion
-    private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
-    private var accentColor: Color { themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue }
     
     var body: some View {
         NavigationStack {
@@ -211,7 +206,7 @@ struct ProfileView: View {
                                     Label(showMore ? "Hide older profiles" : "Show \(extraProfiles.count) older profiles",
                                           systemImage: showMore ? "chevron.up" : "chevron.down")
                                         .font(.caption)
-                                        .foregroundStyle(accentColor)
+                                        .foregroundStyle(.blue)
                                 }
                             }
                         }
@@ -276,8 +271,7 @@ struct ProfileView: View {
                 }
             }
         }
-        .preferredColorScheme(preferredScheme)
-        .alert(alertTitle, isPresented: $alert) {
+                .alert(alertTitle, isPresented: $alert) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(alertMsg)
@@ -335,7 +329,7 @@ struct ProfileView: View {
                 }
                 Spacer()
                 HStack(spacing: 16) {
-                    profileActionButton(icon: "square.and.arrow.down", color: accentColor) {
+                    profileActionButton(icon: "square.and.arrow.down", color: .blue) {
                         saveProfile(profile: match.profile)
                     }
                     profileActionButton(icon: "trash", color: .refreshRed) {

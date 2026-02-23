@@ -16,20 +16,15 @@ struct ScriptEditorView: View {
     @State private var position: CodeEditor.Position = .init()
     @State private var messages: Set<TextLocated<Message>> = []
 
-    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.themeExpansionManager) private var themeExpansion
-
-    private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
-    private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
     private var editorTheme: Theme {
         colorScheme == .dark ? Theme.defaultDark : Theme.defaultLight
     }
 
     var body: some View {
         ZStack {
-            ThemedBackground(style: backgroundStyle)
+            Color(UIColor.systemBackground)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -57,8 +52,7 @@ struct ScriptEditorView: View {
                 }
             }
         }
-        .preferredColorScheme(preferredScheme)
-        .tint(colorScheme == .dark ? .white : .black)
+                .tint(colorScheme == .dark ? .white : .black)
         .toolbar(.hidden, for: .tabBar)
     }
 
