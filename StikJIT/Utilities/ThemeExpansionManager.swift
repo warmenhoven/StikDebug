@@ -102,7 +102,7 @@ final class ThemeExpansionManager: ObservableObject {
 
     init(previewUnlocked: Bool = false) {
         self.isPreviewInstance = previewUnlocked
-        self.isForcedUnlocked = FeatureFlags.alwaysUnlockThemeExpansion
+        self.isForcedUnlocked = true
         self.distributor = ThemeExpansionManager.detectDistributor()
         self.hasThemeExpansion = previewUnlocked || isForcedUnlocked
         loadCustomThemes()

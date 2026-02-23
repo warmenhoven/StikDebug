@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage("enablePiP") private var enablePiP = false
     @AppStorage(UserDefaults.Keys.txmOverride) private var overrideTXMDetection = false
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
+    @AppStorage("customTargetIP") private var customTargetIP = ""
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @AppStorage(TabConfiguration.storageKey) private var enabledTabIdentifiers = TabConfiguration.defaultRawValue
     @AppStorage("primaryTabSelection") private var tabSelection = TabConfiguration.defaultIDs.first ?? "home"
@@ -75,13 +76,10 @@ struct SettingsView: View {
         ]
         options.append(TabOption(id: "deviceinfo", title: "Device Info", detail: "View detailed device metadata", icon: "iphone.and.arrow.forward", isBeta: false))
         options.append(TabOption(id: "profiles", title: "App Expiry", detail: "Check app expiration date, install/remove profiles", icon: "calendar.badge.clock", isBeta: false))
+        options.append(TabOption(id: "processes", title: "Processes", detail: "Inspect running apps", icon: "rectangle.stack.person.crop", isBeta: false))
         
-        if FeatureFlags.showBetaTabs {
-            options.append(TabOption(id: "processes", title: "Processes", detail: "Inspect running apps", icon: "rectangle.stack.person.crop", isBeta: true))
-            options.append(TabOption(id: "devicelibrary", title: "Devices", detail: "Manage external devices", icon: "list.bullet.rectangle", isBeta: true))
-            if FeatureFlags.isLocationSpoofingEnabled && !isAppStoreBuild {
-                options.append(TabOption(id: "location", title: "Location Sim", detail: "Sideload only", icon: "location", isBeta: true))
-            }
+        if !isAppStoreBuild {
+            options.append(TabOption(id: "location", title: "Location Sim", detail: "Sideload only", icon: "location", isBeta: false))
         }
         return options
     }
@@ -144,6 +142,13 @@ struct SettingsView: View {
 
                 // 6) Advanced
                 Section("Advanced") {
+                    HStack {
+                        Text("Target Device IP")
+                        Spacer()
+                        TextField("127.0.0.1", text: $customTargetIP)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                    }
                     Button { openAppFolder() } label: {
                         Label("App Folder", systemImage: "folder")
                     }.foregroundStyle(.primary)
@@ -379,15 +384,6 @@ struct TabCustomizationView: View {
                 ForEach(pinnedOptions) { option in
                     HStack {
                         Label(option.title, systemImage: option.icon)
-                        if option.isBeta {
-                            Spacer()
-                            Text("BETA")
-                                .font(.caption2.weight(.bold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .foregroundStyle(.orange)
-                                .background(Capsule().fill(Color.orange.opacity(0.15)))
-                        }
                     }
                 }
                 .onMove { indices, newOffset in
@@ -395,16 +391,10 @@ struct TabCustomizationView: View {
                     ids.move(fromOffsets: indices, toOffset: newOffset)
                     enabledTabIdentifiers = TabConfiguration.serialize(ids)
                 }
-                .onDelete { indexSet in
-                    var ids = selectedIDs
-                    ids.remove(atOffsets: indexSet)
-                    if ids.isEmpty { ids = TabConfiguration.defaultIDs }
-                    enabledTabIdentifiers = TabConfiguration.serialize(ids)
-                }
             } header: {
                 Text("Pinned")
             } footer: {
-                Text("Settings is always the last tab.")
+                Text("Settings is fixed as the 4th tab.")
             }
 
             if !availableOptions.isEmpty {
@@ -418,15 +408,6 @@ struct TabCustomizationView: View {
                         } label: {
                             HStack {
                                 Label(option.title, systemImage: option.icon)
-                                if option.isBeta {
-                                    Spacer()
-                                    Text("BETA")
-                                        .font(.caption2.weight(.bold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 2)
-                                        .foregroundStyle(.orange)
-                                        .background(Capsule().fill(Color.orange.opacity(0.15)))
-                                }
                             }
                         }
                         .foregroundStyle(.primary)

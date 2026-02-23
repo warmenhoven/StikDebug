@@ -9,7 +9,7 @@ import Foundation
 
 enum DeviceConnectionContext {
     static var isUsingExternalDevice: Bool {
-        DeviceLibraryStore.shared.isUsingExternalDevice
+        return targetIPAddress != "127.0.0.1"
     }
     
     static var requiresLoopbackVPN: Bool {
@@ -17,8 +17,9 @@ enum DeviceConnectionContext {
     }
     
     static var targetIPAddress: String {
-        if let device = DeviceLibraryStore.shared.activeDevice {
-            return device.ipAddress
+        let stored = UserDefaults.standard.string(forKey: "customTargetIP")
+        if let stored, !stored.isEmpty {
+            return stored
         }
         return "127.0.0.1"
     }

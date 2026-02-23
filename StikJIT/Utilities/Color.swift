@@ -48,6 +48,14 @@ extension Color {
 
     /// Black or white, whichever reads better on top of `self`.
     func contrastText() -> Color { isDark() ? .white : .black }
+    
+    static var primaryBackground: Color {
+        Color(UIColor.systemBackground)
+    }
+    
+    static var secondaryText: Color {
+        Color(UIColor.secondaryLabel)
+    }
 }
 
 // MARK: - Array<Color> helpers (shared across the app)

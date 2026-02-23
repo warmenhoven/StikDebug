@@ -54,22 +54,17 @@ struct MainTabView: View {
             TabDescriptor(id: "home", title: "Home", systemImage: "house") { AnyView(HomeView()) },
             TabDescriptor(id: "console", title: "Console", systemImage: "terminal") { AnyView(ConsoleLogsView()) },
             TabDescriptor(id: "scripts", title: "Scripts", systemImage: "scroll") { AnyView(ScriptListView()) },
-            TabDescriptor(id: "deviceinfo", title: "Device Info", systemImage: "iphone.and.arrow.forward") { AnyView(DeviceInfoView()) }
+            TabDescriptor(id: "deviceinfo", title: "Device Info", systemImage: "iphone.and.arrow.forward") { AnyView(DeviceInfoView()) },
+            TabDescriptor(id: "profiles", title: "App Expiry", systemImage: "calendar.badge.clock") { AnyView(ProfileView()) },
+            TabDescriptor(id: "processes", title: "Processes", systemImage: "rectangle.stack.person.crop") { AnyView(ProcessInspectorView()) },
+            TabDescriptor(id: "location", title: "Location", systemImage: "location") { AnyView(LocationSimulationView()) }
         ]
-        if FeatureFlags.showBetaTabs {
-            tabs.append(TabDescriptor(id: "profiles", title: "App Expiry", systemImage: "calendar.badge.clock") { AnyView(ProfileView()) })
-            tabs.append(TabDescriptor(id: "processes", title: "Processes", systemImage: "rectangle.stack.person.crop") { AnyView(ProcessInspectorView()) })
-            tabs.append(TabDescriptor(id: "devicelibrary", title: "Devices", systemImage: "list.bullet.rectangle") { AnyView(DeviceLibraryView()) })
-            if FeatureFlags.isLocationSpoofingEnabled {
-                tabs.append(TabDescriptor(id: "location", title: "Location", systemImage: "location") { AnyView(LocationSimulationView()) })
-            }
-        }
         return tabs
     }
     
     private var availableTabs: [TabDescriptor] {
         configurableTabs.filter { descriptor in
-            descriptor.id != "location" || (!isAppStoreBuild && FeatureFlags.isLocationSpoofingEnabled && FeatureFlags.showBetaTabs)
+            descriptor.id != "location" || !isAppStoreBuild
         }
     }
     
@@ -85,11 +80,21 @@ struct MainTabView: View {
     }
     
     private func ensureSelectionIsValid() {
-        let ids = selectedTabDescriptors.map { $0.id }
-        if ids.contains(selection) || selection == settingsTab.id {
+        let ids = displayTabs.map { $0.id }
+        if ids.contains(selection) {
             return
         }
         selection = ids.first ?? settingsTab.id
+    }
+    
+    private var displayTabs: [TabDescriptor] {
+        var tabs = selectedTabDescriptors
+        if tabs.count >= 3 {
+            tabs.insert(settingsTab, at: 3)
+        } else {
+            tabs.append(settingsTab)
+        }
+        return tabs
     }
     
     var body: some View {
@@ -99,15 +104,11 @@ struct MainTabView: View {
             
             // Main tabs
             TabView(selection: $selection) {
-                ForEach(selectedTabDescriptors) { descriptor in
+                ForEach(displayTabs) { descriptor in
                     descriptor.builder()
                         .tabItem { Label(descriptor.title, systemImage: descriptor.systemImage) }
                         .tag(descriptor.id)
                 }
-                
-                settingsTab.builder()
-                    .tabItem { Label(settingsTab.title, systemImage: settingsTab.systemImage) }
-                    .tag(settingsTab.id)
             }
             .id((themeExpansion?.hasThemeExpansion == true) ? customAccentColorHex : "default-accent")
             .tint(accentColor)
