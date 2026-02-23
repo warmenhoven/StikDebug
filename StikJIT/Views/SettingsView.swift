@@ -180,13 +180,6 @@ struct SettingsView: View {
         }
         .tint(accentColor)
         .preferredColorScheme(preferredScheme)
-        .sheet(isPresented: $showingDisplayView) {
-            if let manager = themeExpansion {
-                DisplayView().themeExpansionManager(manager)
-            } else {
-                DisplayView()
-            }
-        }
         .fileImporter(
             isPresented: $isShowingPairingFilePicker,
             allowedContentTypes: [UTType(filenameExtension: "mobiledevicepairing", conformingTo: .data)!, .propertyList],
