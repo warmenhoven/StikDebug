@@ -91,13 +91,7 @@ static JITEnableContext* sharedJITContext = nil;
 - (IdevicePairingFile*)getPairingFileWithError:(NSError**)error {
     NSFileManager* fm = [NSFileManager defaultManager];
     NSURL* docPathUrl = [fm URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
-    NSString* currentDeviceUUIDStr = [NSUserDefaults.standardUserDefaults stringForKey:@"DeviceLibraryActiveDeviceID"];
-    NSURL* pairingFileURL;
-    if(!currentDeviceUUIDStr || [currentDeviceUUIDStr isEqualToString:@"00000000-0000-0000-0000-000000000001"]) {
-        pairingFileURL = [docPathUrl URLByAppendingPathComponent:@"pairingFile.plist"];
-    } else {
-        pairingFileURL = [docPathUrl URLByAppendingPathComponent:[NSString stringWithFormat:@"DeviceLibrary/Pairings/%@.mobiledevicepairing", currentDeviceUUIDStr]];
-    }
+    NSURL* pairingFileURL = [docPathUrl URLByAppendingPathComponent:@"pairingFile.plist"];
 
     if (![fm fileExistsAtPath:pairingFileURL.path]) {
         *error = [self errorWithStr:@"Pairing file not found!" code:-17];

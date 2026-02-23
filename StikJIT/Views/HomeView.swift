@@ -414,9 +414,6 @@ public extension ProcessInfo {
         if isTXMOverridden {
             return true
         }
-        if DeviceLibraryStore.shared.isUsingExternalDevice {
-            return DeviceLibraryStore.shared.activeDevice?.isTXM ?? false
-        }
         return ProcessInfo.detectLocalTXM()
     }
     

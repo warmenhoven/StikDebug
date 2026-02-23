@@ -15,6 +15,7 @@ struct ConsoleLogsView: View {
     @State private var selectedConsoleTab: ConsoleTab = .idevice
     @State private var jitScrollView: ScrollViewProxy? = nil
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
+    @AppStorage("powerUser") private var powerUser: Bool = false
     
     @State private var showingCustomAlert = false
     @State private var alertMessage = ""
@@ -42,26 +43,28 @@ struct ConsoleLogsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if selectedConsoleTab == .idevice {
+                if selectedConsoleTab == .idevice || !powerUser {
                     jitLogsPane
                 } else {
                     syslogLogsPane
                 }
             }
-            .padding(.top, 12)
+            .navigationTitle("Console")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("", selection: $selectedConsoleTab) {
-                        Text("idevice").tag(ConsoleTab.idevice)
-                        Text("Syslog").tag(ConsoleTab.syslog)
+                if powerUser {
+                    ToolbarItem(placement: .principal) {
+                        Picker("", selection: $selectedConsoleTab) {
+                            Text("idevice").tag(ConsoleTab.idevice)
+                            Text("Syslog").tag(ConsoleTab.syslog)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 180)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        if selectedConsoleTab == .idevice {
+                        if selectedConsoleTab == .idevice || !powerUser {
                             Button("Refresh", systemImage: "arrow.clockwise") {
                                 Task { await loadIdeviceLogsAsync() }
                             }

@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage(UserDefaults.Keys.txmOverride) private var overrideTXMDetection = false
     @AppStorage("keepAliveAudio") private var keepAliveAudio = true
     @AppStorage("keepAliveLocation") private var keepAliveLocation = true
+    @AppStorage("powerUser") private var powerUser = false
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @AppStorage("customTargetIP") private var customTargetIP = ""
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
@@ -95,20 +96,18 @@ struct SettingsView: View {
                     .padding(.vertical, 8)
                 }
 
-                // 3) Navigation
-                Section("Navigation") {
-                    NavigationLink {
-                        TabCustomizationView(
-                            tabOptions: tabOptions,
-                            enabledTabIdentifiers: $enabledTabIdentifiers,
-                            tabSelection: $tabSelection
-                        )
-                    } label: {
-                        Label("Tab Bar", systemImage: "list.bullet")
+                // 2) Profile
+                Section("Profile") {
+                    HStack {
+                        Text("Username")
+                        Spacer()
+                        TextField("User", text: $username)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                // 4) Pairing File
+                // 3) Pairing File
                 Section("Pairing File") {
                     Button { isShowingPairingFilePicker = true } label: {
                         Label("Import Pairing File", systemImage: "doc.badge.plus")
@@ -152,6 +151,13 @@ struct SettingsView: View {
 
                 // 6) Behavior
                 Section("Behavior") {
+                    Toggle(isOn: $powerUser) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Power User")
+                            Text("Unlocks all tabs, syslog, and tab customization.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     Toggle(isOn: $overrideTXMDetection) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Always Run Scripts")
@@ -161,14 +167,35 @@ struct SettingsView: View {
                     }
                 }
 
-                // 6) Advanced
+                // 7) Advanced
                 Section("Advanced") {
-                    HStack {
-                        Text("Target Device IP")
-                        Spacer()
-                        TextField("127.0.0.1", text: $customTargetIP)
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                    if powerUser {
+                        NavigationLink {
+                            TabCustomizationView(
+                                tabOptions: tabOptions,
+                                enabledTabIdentifiers: $enabledTabIdentifiers,
+                                tabSelection: $tabSelection
+                            )
+                        } label: {
+                            Label("Tab Bar", systemImage: "list.bullet")
+                        }
+                    }
+                    if powerUser {
+                        HStack {
+                            Text("Target Device IP")
+                            Spacer()
+                            TextField("10.7.0.1", text: $customTargetIP)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                                .toolbar {
+                                    ToolbarItemGroup(placement: .keyboard) {
+                                        Spacer()
+                                        Button("Done") {
+                                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                        }
+                                    }
+                                }
+                        }
                     }
                     Button { openAppFolder() } label: {
                         Label("App Folder", systemImage: "folder")

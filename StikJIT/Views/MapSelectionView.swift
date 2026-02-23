@@ -16,27 +16,19 @@ extension CLLocationCoordinate2D: Equatable {
 }
 
 struct LocationSimulationView: View {
+    // Serial queue: simulate_location and clear_simulated_location share C global
+    // state — serialising all calls eliminates the use-after-free race.
+    private static let locationQueue = DispatchQueue(label: "com.stik.location-sim",
+                                                    qos: .userInitiated)
+
     @State private var coordinate: CLLocationCoordinate2D?
     @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
 
     @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
-    @State private var resendTimer: Timer?
-
-    private var isAppStoreBuild: Bool {
-        #if APPSTORE
-        return true
-        #else
-        return false
-        #endif
-    }
+    @State private var isBusy = false
 
     private var pairingFilePath: String {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let uuid = UserDefaults.standard.string(forKey: "DeviceLibraryActiveDeviceID") ?? ""
-        let name = (uuid != "00000000-0000-0000-0000-000000000001" && !uuid.isEmpty)
-            ? "DeviceLibrary/Pairings/\(uuid).mobiledevicepairing"
-            : "pairingFile.plist"
-        return docs.appendingPathComponent(name).path()
+        URL.documentsDirectory.appendingPathComponent("pairingFile.plist").path()
     }
 
     private var pairingExists: Bool {
@@ -44,7 +36,8 @@ struct LocationSimulationView: View {
     }
 
     private var deviceIP: String {
-        UserDefaults.standard.string(forKey: "TunnelDeviceIP") ?? "10.7.0.1"
+        let stored = UserDefaults.standard.string(forKey: "customTargetIP") ?? ""
+        return stored.isEmpty ? "10.7.0.1" : stored
     }
 
     var body: some View {
@@ -63,7 +56,6 @@ struct LocationSimulationView: View {
                     }
                 }
                 .mapControls {
-                    MapUserLocationButton()
                     MapCompass()
                 }
             }
@@ -84,11 +76,11 @@ struct LocationSimulationView: View {
                         Button("Stop", action: clear)
                             .buttonStyle(.bordered)
                             .tint(.red)
-                            .disabled(!pairingExists)
+                            .disabled(!pairingExists || isBusy)
 
                         Button("Simulate Location", action: simulate)
                             .buttonStyle(.borderedProminent)
-                            .disabled(isAppStoreBuild || !pairingExists)
+                            .disabled(!pairingExists || isBusy)
                     }
                 } else {
                     Text("Tap map to drop pin")
@@ -101,27 +93,38 @@ struct LocationSimulationView: View {
         }
         .navigationBarHidden(true)
         .onDisappear {
-            stopResendLoop()
             endBackgroundTask()
         }
     }
 
     private func simulate() {
-        guard pairingExists, let coord = coordinate else { return }
-        let code = simulate_location(deviceIP, coord.latitude, coord.longitude, pairingFilePath)
-        if code == 0 {
-            beginBackgroundTask()
-            startResendLoop()
+        guard pairingExists, let coord = coordinate, !isBusy else { return }
+        isBusy = true
+        let ip = deviceIP
+        let path = pairingFilePath
+        let lat = coord.latitude
+        let lon = coord.longitude
+        Self.locationQueue.async {
+            let code = simulate_location(ip, lat, lon, path)
+            DispatchQueue.main.async {
+                isBusy = false
+                if code == 0 {
+                    beginBackgroundTask()
+                }
+            }
         }
     }
 
     private func clear() {
-        guard pairingExists else { return }
-        let code = clear_simulated_location()
-        if code == 0 {
-            coordinate = nil
-            stopResendLoop()
-            endBackgroundTask()
+        guard pairingExists, !isBusy else { return }
+        isBusy = true
+        Self.locationQueue.async {
+            _ = clear_simulated_location()
+            DispatchQueue.main.async {
+                isBusy = false
+                coordinate = nil
+                endBackgroundTask()
+            }
         }
     }
 
@@ -136,16 +139,4 @@ struct LocationSimulationView: View {
         backgroundTaskID = .invalid
     }
 
-    private func startResendLoop() {
-        resendTimer?.invalidate()
-        resendTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in
-            guard pairingExists, let coord = coordinate else { return }
-            _ = simulate_location(deviceIP, coord.latitude, coord.longitude, pairingFilePath)
-        }
-    }
-
-    private func stopResendLoop() {
-        resendTimer?.invalidate()
-        resendTimer = nil
-    }
 }
