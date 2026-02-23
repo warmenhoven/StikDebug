@@ -128,8 +128,8 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .debuggable: return "Debuggable"
-        case .launch: return "Launch Apps"
+        case .debuggable: return "JIT"
+        case .launch: return "Other"
         }
     }
 }
@@ -271,7 +271,7 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
                         VStack(spacing: 8) {
                             Image(systemName: debuggableSearchIsActive ? "text.magnifyingglass" : "magnifyingglass")
                                 .font(.system(size: 36)).foregroundStyle(.secondary)
-                            Text(debuggableSearchIsActive ? "No matching apps".localized : "No Debuggable App Found".localized)
+                            Text(debuggableSearchIsActive ? "No matching apps".localized : "No JIT Apps Found".localized)
                                 .font(.headline)
                             Text(debuggableSearchIsActive
                                  ? "Try a different name or bundle identifier.".localized
@@ -332,7 +332,7 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
                         VStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 36)).foregroundStyle(.secondary)
-                            Text(launchSearchIsActive ? "No matches".localized : "No Launchable Apps".localized)
+                            Text(launchSearchIsActive ? "No matches".localized : "No Apps Found".localized)
                                 .font(.headline)
                             Text(launchSearchIsActive
                                  ? "Try another name or bundle identifier.".localized
@@ -344,7 +344,7 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
                         .listRowBackground(Color.clear)
                     }
                 } else {
-                    Section("Launchable Apps".localized) {
+                    Section("Other Apps".localized) {
                         ForEach(filteredLaunchApps, id: \.key) { bundleID, appName in
                             let isPinned = pinnedSystemApps.contains(bundleID)
                             LaunchAppRow(
