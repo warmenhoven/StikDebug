@@ -37,10 +37,6 @@
    </a>
 </div>
 
-## Project Status
-> [!NOTE]
-> A major code cleanup and rewrite is currently underway on the [`semi-rewrite`](https://github.com/StephenDev0/StikDebug/tree/semi-rewrite) branch to improve stability and maintainability.
-
 ## Code Help
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/stephendev0/stikdebug)
 
