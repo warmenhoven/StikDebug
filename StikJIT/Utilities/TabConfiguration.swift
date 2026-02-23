@@ -3,7 +3,7 @@ import Foundation
 enum TabConfiguration {
     static let storageKey = "enabledTabIdentifiers"
     static let maxSelectableTabs = 12
-    private static let coreIDs: [String] = ["home", "console", "scripts", "deviceinfo"]
+    private static let coreIDs: [String] = ["home", "scripts", "tools", "deviceinfo"]
     static var allowedIDs: [String] {
         var ids = coreIDs
         ids.append("profiles")
@@ -11,7 +11,7 @@ enum TabConfiguration {
         ids.append("location")
         return ids
     }
-    static let defaultIDs: [String] = ["home", "console", "scripts", "deviceinfo", "profiles", "processes", "location"]
+    static let defaultIDs: [String] = ["home", "scripts", "tools", "deviceinfo", "profiles", "processes", "location"]
     static let defaultRawValue = serialize(defaultIDs)
     
     static func sanitize(raw: String) -> [String] {

@@ -66,8 +66,8 @@ struct SettingsView: View {
     private var tabOptions: [TabOption] {
         var options: [TabOption] = [
             TabOption(id: "home", title: "Home", detail: "Dashboard overview", icon: "house", isBeta: false),
-            TabOption(id: "console", title: "Console", detail: "Live device logs", icon: "terminal", isBeta: false),
-            TabOption(id: "scripts", title: "Scripts", detail: "Manage automation scripts", icon: "scroll", isBeta: false)
+            TabOption(id: "scripts", title: "Scripts", detail: "Manage automation scripts", icon: "scroll", isBeta: false),
+            TabOption(id: "tools", title: "Tools", detail: "Access additional tools", icon: "wrench.and.screwdriver", isBeta: false)
         ]
         options.append(TabOption(id: "deviceinfo", title: "Device Info", detail: "View detailed device metadata", icon: "iphone.and.arrow.forward", isBeta: false))
         options.append(TabOption(id: "profiles", title: "App Expiry", detail: "Check app expiration date, install/remove profiles", icon: "calendar.badge.clock", isBeta: false))
@@ -154,7 +154,7 @@ struct SettingsView: View {
                     Toggle(isOn: $powerUser) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Power User")
-                            Text("Unlocks all tabs, syslog, and tab customization.")
+                            Text("Unlocks Tools tab, syslog, and advanced options.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -169,17 +169,6 @@ struct SettingsView: View {
 
                 // 7) Advanced
                 Section("Advanced") {
-                    if powerUser {
-                        NavigationLink {
-                            TabCustomizationView(
-                                tabOptions: tabOptions,
-                                enabledTabIdentifiers: $enabledTabIdentifiers,
-                                tabSelection: $tabSelection
-                            )
-                        } label: {
-                            Label("Tab Bar", systemImage: "list.bullet")
-                        }
-                    }
                     if powerUser {
                         HStack {
                             Text("Target Device IP")

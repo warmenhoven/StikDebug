@@ -29,6 +29,7 @@ struct HomeView: View {
     @State private var pendingBundleIdToEnableJIT : String? = nil
     
     @State var scriptViewShow = false
+    @State private var isShowingConsole = false
     @AppStorage("DefaultScriptName") var selectedScript = "attachDetach.js"
     @State var jsModel: RunJSViewModel?
     @ObservedObject private var mounting = MountingProgress.shared
@@ -93,7 +94,25 @@ struct HomeView: View {
                     .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
                 }
                 .padding(.horizontal, 20)
-                
+
+                Button(action: {
+                    isShowingConsole = true
+                }) {
+                    HStack {
+                        Image(systemName: "terminal")
+                            .font(.system(size: 20))
+                        Text("Open Console")
+                            .font(.system(.title3, design: .rounded))
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.gray.opacity(0.2))
+                    .foregroundColor(.primary)
+                    .cornerRadius(16)
+                }
+                .padding(.horizontal, 20)
+
                 // Status message area - keeps layout consistent
                 ZStack {
                     // Progress bar for importing file
@@ -256,6 +275,18 @@ struct HomeView: View {
             if let pendingBundleIdToEnableJIT {
                 startJITInBackground(with: pendingBundleIdToEnableJIT)
                 self.pendingBundleIdToEnableJIT = nil
+            }
+        }
+        .sheet(isPresented: $isShowingConsole) {
+            NavigationStack {
+                ConsoleLogsView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") {
+                                isShowingConsole = false
+                            }
+                        }
+                    }
             }
         }
         .sheet(isPresented: $scriptViewShow) {

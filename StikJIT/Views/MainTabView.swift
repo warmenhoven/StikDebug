@@ -41,8 +41,8 @@ struct MainTabView: View {
     private var configurableTabs: [TabDescriptor] {
         var tabs: [TabDescriptor] = [
             TabDescriptor(id: "home", title: "Home", systemImage: "house") { AnyView(HomeView()) },
-            TabDescriptor(id: "console", title: "Console", systemImage: "terminal") { AnyView(ConsoleLogsView()) },
             TabDescriptor(id: "scripts", title: "Scripts", systemImage: "scroll") { AnyView(ScriptListView()) },
+            TabDescriptor(id: "tools", title: "Tools", systemImage: "wrench.and.screwdriver") { AnyView(ToolsView()) },
             TabDescriptor(id: "deviceinfo", title: "Device Info", systemImage: "iphone.and.arrow.forward") { AnyView(DeviceInfoView()) },
             TabDescriptor(id: "profiles", title: "App Expiry", systemImage: "calendar.badge.clock") { AnyView(ProfileView()) },
             TabDescriptor(id: "processes", title: "Processes", systemImage: "rectangle.stack.person.crop") { AnyView(ProcessInspectorView()) },
@@ -76,18 +76,16 @@ struct MainTabView: View {
     
     private var displayTabs: [TabDescriptor] {
         if !powerUser {
-            var tabs = ["home", "console", "scripts"].compactMap { id in
+            var tabs = ["home", "scripts"].compactMap { id in
                 configurableTabs.first(where: { $0.id == id })
             }
-            tabs.insert(settingsTab, at: min(3, tabs.count))
+            tabs.insert(settingsTab, at: min(2, tabs.count))
             return tabs
         }
-        var tabs = selectedTabDescriptors
-        if tabs.count >= 3 {
-            tabs.insert(settingsTab, at: 3)
-        } else {
-            tabs.append(settingsTab)
+        var tabs = ["home", "scripts", "tools"].compactMap { id in
+            configurableTabs.first(where: { $0.id == id })
         }
+        tabs.insert(settingsTab, at: min(3, tabs.count))
         return tabs
     }
     

@@ -24,6 +24,7 @@
 	<array>
 		<string>audio</string>
 		<string>location</string>
+		<string>fetch</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
