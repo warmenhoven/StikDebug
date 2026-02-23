@@ -11,9 +11,7 @@ import UniformTypeIdentifiers
 struct HomeView: View {
 
     @AppStorage("username") private var username = "User"
-    @AppStorage("customBackgroundColor") private var customBackgroundColorHex: String = Color.primaryBackground.toHex() ?? "#000000"
     @AppStorage("autoQuitAfterEnablingJIT") private var doAutoQuitAfterEnablingJIT = false
-    @State private var selectedBackgroundColor: Color = Color(hex: UserDefaults.standard.string(forKey: "customBackgroundColor") ?? "#000000") ?? Color.primaryBackground
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @AppStorage("bundleID") private var bundleID: String = ""
     @State private var isProcessing = false
@@ -37,8 +35,6 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            selectedBackgroundColor.edgesIgnoringSafeArea(.all)
-            
             VStack(spacing: 25) {
                 Spacer()
                 VStack(spacing: 5) {
@@ -125,11 +121,9 @@ struct HomeView: View {
                             HStack {
                                 Text("Processing pairing file...")
                                     .font(.system(.caption, design: .rounded))
-                                    .foregroundColor(.secondaryText)
                                 Spacer()
                                 Text("\(Int(importProgress * 100))%")
                                     .font(.system(.caption, design: .rounded))
-                                    .foregroundColor(.secondaryText)
                             }
                             
                             GeometryReader { geometry in
@@ -176,7 +170,6 @@ struct HomeView: View {
             MountingProgress.shared.checkforMounted()
         }
         .onReceive(timer) { _ in
-            refreshBackground()
             checkPairingFileExists()
             if mounting.mountingThread == nil && !mounting.coolisMounted {
                 MountingProgress.shared.checkforMounted()
@@ -394,10 +387,6 @@ struct HomeView: View {
     
     private func checkPairingFileExists() {
         pairingFileExists = FileManager.default.fileExists(atPath: URL.documentsDirectory.appendingPathComponent("pairingFile.plist").path)
-    }
-    
-    private func refreshBackground() {
-        selectedBackgroundColor = Color(hex: customBackgroundColorHex) ?? Color.primaryBackground
     }
     
     private func startJITInBackground(with bundleID: String) {
