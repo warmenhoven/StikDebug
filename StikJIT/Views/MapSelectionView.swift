@@ -25,6 +25,7 @@ struct LocationSimulationView: View {
     @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
 
     @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    @State private var resendTimer: Timer?
     @State private var isBusy = false
 
     private var pairingFilePath: String {
@@ -93,6 +94,7 @@ struct LocationSimulationView: View {
         }
         .navigationBarHidden(true)
         .onDisappear {
+            stopResendLoop()
             endBackgroundTask()
         }
     }
@@ -110,6 +112,7 @@ struct LocationSimulationView: View {
                 isBusy = false
                 if code == 0 {
                     beginBackgroundTask()
+                    startResendLoop()
                 }
             }
         }
@@ -118,6 +121,7 @@ struct LocationSimulationView: View {
     private func clear() {
         guard pairingExists, !isBusy else { return }
         isBusy = true
+        stopResendLoop()
         Self.locationQueue.async {
             _ = clear_simulated_location()
             DispatchQueue.main.async {
@@ -139,4 +143,22 @@ struct LocationSimulationView: View {
         backgroundTaskID = .invalid
     }
 
+    private func startResendLoop() {
+        resendTimer?.invalidate()
+        resendTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in
+            guard let coord = coordinate else { return }
+            let ip = deviceIP
+            let path = pairingFilePath
+            let lat = coord.latitude
+            let lon = coord.longitude
+            Self.locationQueue.async {
+                _ = simulate_location(ip, lat, lon, path)
+            }
+        }
+    }
+
+    private func stopResendLoop() {
+        resendTimer?.invalidate()
+        resendTimer = nil
+    }
 }
