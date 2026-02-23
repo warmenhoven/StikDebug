@@ -53,6 +53,7 @@
 
 | iOS Version              | Status               | Notes                                                                 |
 |--------------------------|----------------------|-----------------------------------------------------------------------|
+| 1.0 – 17.3.X             | Not supported      | Uses Different Connection Protocols                                                                |
 | 17.4 – 18.x              | Fully supported      | Stable                                                                |
 | 26.0 – 26.3              | Supported            | Limited App Availability (Developers need to update their apps to work.)                                        |
 | 26.4 Developer Beta 1    | Critical issues   | lockdownd drops connections → JIT broken; do not update               |
