@@ -28,9 +28,7 @@ struct HomeView: View {
     @State private var viewDidAppeared = false
     @State private var pendingBundleIdToEnableJIT : String? = nil
     
-    @AppStorage("enablePiP") private var enablePiP = true
     @State var scriptViewShow = false
-    @State private var pipRequired = false
     @AppStorage("DefaultScriptName") var selectedScript = "attachDetach.js"
     @State var jsModel: RunJSViewModel?
     @ObservedObject private var mounting = MountingProgress.shared
@@ -260,12 +258,6 @@ struct HomeView: View {
                 self.pendingBundleIdToEnableJIT = nil
             }
         }
-        .pipify(isPresented: Binding(
-            get: { pipRequired && enablePiP },
-            set: { pipRequired = $0 }
-        )) {
-            RunJSViewPiP(model: $jsModel)
-        }
         .sheet(isPresented: $scriptViewShow) {
             NavigationStack {
                 if let jsModel {
@@ -356,7 +348,6 @@ struct HomeView: View {
             DispatchQueue.main.async {
                 jsModel = model
                 scriptViewShow = true
-                pipRequired = true
             }
             
             DispatchQueue.global(qos: .background).async {
@@ -382,7 +373,6 @@ struct HomeView: View {
             let finishProcessing = {
                 DispatchQueue.main.async {
                     isProcessing = false
-                    pipRequired = false
                 }
             }
             
@@ -397,9 +387,6 @@ struct HomeView: View {
             var callback: DebugAppCallback? = nil
             if ProcessInfo.processInfo.hasTXM, let sd = scriptData {
                 callback = getJsCallback(sd, name: scriptName ?? bundleID)
-                DispatchQueue.main.async { pipRequired = true }
-            } else {
-                DispatchQueue.main.async { pipRequired = false }
             }
 
             let logger: LogFunc = { message in if let message { LogManager.shared.addInfoLog(message) } }

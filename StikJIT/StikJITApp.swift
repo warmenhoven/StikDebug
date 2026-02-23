@@ -15,8 +15,9 @@ private func registerAdvancedOptionsDefault() {
     // Enable advanced options by default on iOS 19/26 and above
     let enabled = os.majorVersion >= 19
     UserDefaults.standard.register(defaults: ["enableAdvancedOptions": enabled])
-    UserDefaults.standard.register(defaults: ["enablePiP": enabled])
     UserDefaults.standard.register(defaults: [UserDefaults.Keys.txmOverride: false])
+    UserDefaults.standard.register(defaults: ["keepAliveAudio": true])
+    UserDefaults.standard.register(defaults: ["keepAliveLocation": true])
 }
 
 // MARK: - Welcome Sheet
@@ -228,6 +229,12 @@ struct HeartbeatApp: App {
     
     init() {
         registerAdvancedOptionsDefault()
+        if UserDefaults.standard.bool(forKey: "keepAliveAudio") {
+            BackgroundAudioManager.shared.start()
+        }
+        if UserDefaults.standard.bool(forKey: "keepAliveLocation") {
+            BackgroundLocationManager.shared.start()
+        }
         if let fixMethod  = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.fix_init(forOpeningContentTypes:asCopy:))),
            let origMethod = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.init(forOpeningContentTypes:asCopy:))) {
             method_exchangeImplementations(origMethod, fixMethod)

@@ -20,9 +20,14 @@
 		<string>_stikdebug._tcp</string>
 		<string>_stikdebug._udp</string>
 	</array>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>StikDebug uses location to stay running in the background and maintain your JIT connection.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>StikDebug uses location to stay running in the background and maintain your JIT connection.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>location</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>

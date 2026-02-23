@@ -13,8 +13,9 @@ struct SettingsView: View {
     @AppStorage("enableAdvancedOptions") private var enableAdvancedOptions = false
     @AppStorage("enableAdvancedBetaOptions") private var enableAdvancedBetaOptions = false
     @AppStorage("enableTesting") private var enableTesting = false
-    @AppStorage("enablePiP") private var enablePiP = false
     @AppStorage(UserDefaults.Keys.txmOverride) private var overrideTXMDetection = false
+    @AppStorage("keepAliveAudio") private var keepAliveAudio = true
+    @AppStorage("keepAliveLocation") private var keepAliveLocation = true
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @AppStorage("customTargetIP") private var customTargetIP = ""
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
@@ -118,9 +119,39 @@ struct SettingsView: View {
                     }
                 }
 
-                // 5) Behavior
+                // 5) Background Keep-Alive
+                Section {
+                    Toggle(isOn: $keepAliveAudio) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Silent Audio")
+                            Text("Plays inaudible audio so iOS keeps the app running.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: keepAliveAudio) { _, enabled in
+                        if enabled { BackgroundAudioManager.shared.start() }
+                        else { BackgroundAudioManager.shared.stop() }
+                    }
+
+                    Toggle(isOn: $keepAliveLocation) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Background Location")
+                            Text("Uses low-accuracy location to stay alive even when another app plays audio.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: keepAliveLocation) { _, enabled in
+                        if enabled { BackgroundLocationManager.shared.start() }
+                        else { BackgroundLocationManager.shared.stop() }
+                    }
+                } header: {
+                    Text("Background Keep-Alive")
+                } footer: {
+                    Text("For Background Location to work reliably, go to **Settings → Privacy & Security → Location Services → StikDebug** and select **Always**.")
+                }
+
+                // 6) Behavior
                 Section("Behavior") {
-                    Toggle("Picture in Picture", isOn: $enablePiP)
                     Toggle(isOn: $overrideTXMDetection) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Always Run Scripts")

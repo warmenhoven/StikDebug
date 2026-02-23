@@ -89,7 +89,7 @@ class RunJSViewModel: ObservableObject {
                 self.logs.append(exception.debugDescription)
             }
             self.logs.append("Script Execution Completed")
-            self.logs.append("You are safe to close the PIP Window.")
+            self.logs.append("You are safe to close this window.")
         }
     }
     
@@ -202,28 +202,6 @@ class RunJSViewModel: ObservableObject {
         context.exception = JSValue(object: message, in: context)
     }
 }
-
-struct RunJSViewPiP: View {
-    @Binding var model: RunJSViewModel?
-    @State private var logs: [String] = []
-    private let timer = Timer.publish(every: 0.034, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(logs.suffix(6).indices, id: \.self) { index in
-                Text(logs.suffix(6)[index])
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white)
-            }
-        }
-        .padding()
-        .onReceive(timer) { _ in
-            logs = model?.logs ?? []
-        }
-        .frame(width: 300, height: 150)
-    }
-}
-
 
 struct RunJSView: View {
     @ObservedObject var model: RunJSViewModel
