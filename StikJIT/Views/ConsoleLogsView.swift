@@ -15,8 +15,6 @@ struct ConsoleLogsView: View {
     @State private var selectedConsoleTab: ConsoleTab = .idevice
     @State private var jitScrollView: ScrollViewProxy? = nil
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
-    @AppStorage("powerUser") private var powerUser: Bool = false
-    
     @State private var showingCustomAlert = false
     @State private var alertMessage = ""
     @State private var alertTitle = ""
@@ -29,6 +27,7 @@ struct ConsoleLogsView: View {
     @State private var isLoadingLogs = false
     @State private var jitIsAtBottom = true
     @State private var syslogIsAtBottom = true
+    @State private var syslogSearchText = ""
     @State private var showingSyslogSpeedSelector = false
     private let appLogRefreshInterval: TimeInterval = 3.0
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
@@ -40,10 +39,18 @@ struct ConsoleLogsView: View {
         themeExpansion?.resolvedAccentColor(from: customAccentColorHex) ?? .blue
     }
 
+    private var filteredSyslogEntries: [SystemLogStream.Entry] {
+        if syslogSearchText.isEmpty {
+            return systemLogStream.entries
+        }
+        let query = syslogSearchText.lowercased()
+        return systemLogStream.entries.filter { $0.raw.lowercased().contains(query) }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if selectedConsoleTab == .idevice || !powerUser {
+                if selectedConsoleTab == .idevice {
                     jitLogsPane
                 } else {
                     syslogLogsPane
@@ -52,19 +59,17 @@ struct ConsoleLogsView: View {
             .navigationTitle("Console")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if powerUser {
-                    ToolbarItem(placement: .principal) {
-                        Picker("", selection: $selectedConsoleTab) {
-                            Text("idevice").tag(ConsoleTab.idevice)
-                            Text("Syslog").tag(ConsoleTab.syslog)
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 180)
+                ToolbarItem(placement: .principal) {
+                    Picker("", selection: $selectedConsoleTab) {
+                        Text("App").tag(ConsoleTab.idevice)
+                        Text("System").tag(ConsoleTab.syslog)
                     }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        if selectedConsoleTab == .idevice || !powerUser {
+                        if selectedConsoleTab == .idevice {
                             Button("Refresh", systemImage: "arrow.clockwise") {
                                 Task { await loadIdeviceLogsAsync() }
                             }
@@ -191,46 +196,70 @@ struct ConsoleLogsView: View {
     }
     
     private var syslogLogsPane: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(systemLogStream.entries) { entry in
-                        Text(AttributedString(createSyslogAttributedString(entry)))
-                            .font(.system(size: 11, design: .monospaced))
-                            .textSelection(.enabled)
-                            .lineLimit(nil)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 1)
-                            .padding(.horizontal, 4)
-                            .id(entry.id)
+        VStack(spacing: 0) {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Filter logs", text: $syslogSearchText)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                if !syslogSearchText.isEmpty {
+                    Button {
+                        syslogSearchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .background(
-                    GeometryReader { geometry in
-                        Color.clear.preference(
-                            key: ScrollOffsetPreferenceKey.self,
-                            value: geometry.frame(in: .named("syslogScroll")).minY
-                        )
+            }
+            .padding(8)
+            .background(.bar)
+
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(filteredSyslogEntries) { entry in
+                            Text(AttributedString(createSyslogAttributedString(entry)))
+                                .font(.system(size: 11, design: .monospaced))
+                                .textSelection(.enabled)
+                                .lineLimit(nil)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 1)
+                                .padding(.horizontal, 4)
+                                .id(entry.id)
+                        }
                     }
-                )
-            }
-            .coordinateSpace(name: "syslogScroll")
-            .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                syslogIsAtBottom = offset > -20
-            }
-            .onChange(of: systemLogStream.entries.count) { _ in
-                guard syslogIsAtBottom, let lastLog = systemLogStream.entries.last else { return }
-                withAnimation {
-                    proxy.scrollTo(lastLog.id, anchor: .bottom)
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: ScrollOffsetPreferenceKey.self,
+                                value: geometry.frame(in: .named("syslogScroll")).minY
+                            )
+                        }
+                    )
                 }
-            }
-            .onAppear {
-                if selectedConsoleTab == .syslog && !systemLogStream.isStreaming {
-                    systemLogStream.start()
+                .coordinateSpace(name: "syslogScroll")
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                    syslogIsAtBottom = offset > -20
                 }
-            }
-            .onDisappear {
-                systemLogStream.stop()
+                .onChange(of: systemLogStream.entries.count) { _ in
+                    guard syslogIsAtBottom, syslogSearchText.isEmpty,
+                          let lastLog = systemLogStream.entries.last else { return }
+                    withAnimation {
+                        proxy.scrollTo(lastLog.id, anchor: .bottom)
+                    }
+                }
+                .onAppear {
+                    if selectedConsoleTab == .syslog && !systemLogStream.isStreaming {
+                        systemLogStream.start()
+                    }
+                }
+                .onDisappear {
+                    systemLogStream.stop()
+                }
             }
         }
     }
@@ -516,18 +545,24 @@ struct ConsoleLogsView: View {
     }
 
     private func copySyslogToClipboard() {
-        let content = systemLogStream.concatenatedLog()
-        guard !content.isEmpty else {
+        let entries = filteredSyslogEntries
+        guard !entries.isEmpty else {
             alertTitle = "Export Failed"
-            alertMessage = "No syslog entries to copy."
+            alertMessage = syslogSearchText.isEmpty ? "No syslog entries to copy." : "No matching syslog entries to copy."
             isError = true
             showingCustomAlert = true
             return
         }
 
+        let content = entries.map { entry in
+            "[\(DateFormatter.consoleLogsFormatter.string(from: entry.timestamp))] \(entry.raw)"
+        }.joined(separator: "\n")
+
         UIPasteboard.general.string = content
         alertTitle = "Logs Copied"
-        alertMessage = "Latest syslog entries copied to clipboard."
+        alertMessage = syslogSearchText.isEmpty
+            ? "Latest syslog entries copied to clipboard."
+            : "\(entries.count) filtered syslog entries copied to clipboard."
         isError = false
         showingCustomAlert = true
     }

@@ -92,7 +92,7 @@ struct LocationSimulationView: View {
             .padding(.bottom, 24)
             .padding(.horizontal, 16)
         }
-        .navigationBarHidden(true)
+        .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             stopResendLoop()
             endBackgroundTask()

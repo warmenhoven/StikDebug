@@ -91,7 +91,6 @@ struct HomeView: View {
                     .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(16)
-                    .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
                 }
                 .padding(.horizontal, 20)
 

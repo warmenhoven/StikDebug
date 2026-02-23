@@ -16,7 +16,6 @@ struct SettingsView: View {
     @AppStorage(UserDefaults.Keys.txmOverride) private var overrideTXMDetection = false
     @AppStorage("keepAliveAudio") private var keepAliveAudio = true
     @AppStorage("keepAliveLocation") private var keepAliveLocation = true
-    @AppStorage("powerUser") private var powerUser = false
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @AppStorage("customTargetIP") private var customTargetIP = ""
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
@@ -151,13 +150,6 @@ struct SettingsView: View {
 
                 // 6) Behavior
                 Section("Behavior") {
-                    Toggle(isOn: $powerUser) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Power User")
-                            Text("Unlocks Tools tab, syslog, and advanced options.")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
                     Toggle(isOn: $overrideTXMDetection) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Always Run Scripts")
@@ -169,11 +161,10 @@ struct SettingsView: View {
 
                 // 7) Advanced
                 Section("Advanced") {
-                    if powerUser {
-                        HStack {
-                            Text("Target Device IP")
-                            Spacer()
-                            TextField("10.7.0.1", text: $customTargetIP)
+                    HStack {
+                        Text("Target Device IP")
+                        Spacer()
+                        TextField("10.7.0.1", text: $customTargetIP)
                                 .multilineTextAlignment(.trailing)
                                 .keyboardType(.decimalPad)
                                 .toolbar {
@@ -184,7 +175,6 @@ struct SettingsView: View {
                                         }
                                     }
                                 }
-                        }
                     }
                     Button { openAppFolder() } label: {
                         Label("App Folder", systemImage: "folder")

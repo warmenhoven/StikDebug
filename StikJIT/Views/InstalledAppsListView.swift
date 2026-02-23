@@ -27,7 +27,6 @@ struct InstalledAppsListView: View {
         }
     }
 
-    @AppStorage("powerUser") private var powerUser: Bool = false
     @AppStorage("loadAppIconsOnJIT") private var loadAppIconsOnJIT = true
     private let performanceMode = true
     @State private var launchingBundles: Set<String> = []
@@ -177,23 +176,20 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
                         : "Search".localized
                 )
                 .toolbar {
-                    if powerUser {
-                        ToolbarItem(placement: .principal) {
-                            Picker("", selection: $selectedTab) {
-                                ForEach(AppListTab.allCases) { tab in
-                                    Text(tab.title.localized).tag(tab)
-                                }
+                    ToolbarItem(placement: .principal) {
+                        Picker("", selection: $selectedTab) {
+                            ForEach(AppListTab.allCases) { tab in
+                                Text(tab.title.localized).tag(tab)
                             }
-                            .pickerStyle(.segmented)
-                            .frame(width: 220)
                         }
+                        .pickerStyle(.segmented)
+                        .frame(width: 220)
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Done") { dismiss() }.fontWeight(.semibold)
                     }
                 }
                 .onAppear {
-                    if !powerUser { selectedTab = .debuggable }
                 }
         }
         .overlay {

@@ -23,7 +23,6 @@ struct MainTabView: View {
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @AppStorage(TabConfiguration.storageKey) private var enabledTabIdentifiers: String = TabConfiguration.defaultRawValue
     @AppStorage("primaryTabSelection") private var selection: String = TabConfiguration.defaultIDs.first ?? "home"
-    @AppStorage("powerUser") private var powerUser: Bool = false
     @State private var switchObserver: Any?
     @State private var detachedTab: TabDescriptor?
     @State private var didSetInitialHome = false
@@ -75,13 +74,6 @@ struct MainTabView: View {
     }
     
     private var displayTabs: [TabDescriptor] {
-        if !powerUser {
-            var tabs = ["home", "scripts"].compactMap { id in
-                configurableTabs.first(where: { $0.id == id })
-            }
-            tabs.insert(settingsTab, at: min(2, tabs.count))
-            return tabs
-        }
         var tabs = ["home", "scripts", "tools"].compactMap { id in
             configurableTabs.first(where: { $0.id == id })
         }
@@ -102,7 +94,7 @@ struct MainTabView: View {
                         .tag(descriptor.id)
                 }
             }
-            .id("\((themeExpansion?.hasThemeExpansion == true) ? customAccentColorHex : "default-accent")-\(powerUser)")
+            .id((themeExpansion?.hasThemeExpansion == true) ? customAccentColorHex : "default-accent")
             .tint(accentColor)
             .preferredColorScheme(preferredScheme)
             .onAppear {
@@ -133,9 +125,6 @@ struct MainTabView: View {
             }
             .onChange(of: enabledTabIdentifiers) { _ in
                 ensureSelectionIsValid()
-            }
-            .onChange(of: powerUser) { _ in
-                selection = "settings"
             }
             .sheet(item: $detachedTab) { descriptor in
                 NavigationStack {

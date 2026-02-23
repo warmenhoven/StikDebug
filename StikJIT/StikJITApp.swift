@@ -18,7 +18,6 @@ private func registerAdvancedOptionsDefault() {
     UserDefaults.standard.register(defaults: [UserDefaults.Keys.txmOverride: false])
     UserDefaults.standard.register(defaults: ["keepAliveAudio": true])
     UserDefaults.standard.register(defaults: ["keepAliveLocation": true])
-    UserDefaults.standard.register(defaults: ["powerUser": false])
 }
 
 // MARK: - Welcome Sheet
