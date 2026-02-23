@@ -1,5 +1,4 @@
 import Foundation
-import StoreKit
 import SwiftUI
 
 enum CustomThemeStyle: String, Codable, CaseIterable, Identifiable {
@@ -63,51 +62,19 @@ struct CustomTheme: Identifiable, Codable, Equatable {
     }
 }
 
-// MARK: - Distribution detection (receipt-based)
-
-enum DistributorType: String {
-    case appStore
-    case testFlight
-    case other
-}
-
 @MainActor
 final class ThemeExpansionManager: ObservableObject {
-    static let productIdentifier = "SD_Theme_Expansion"
-    static let comingSoonMessage = "Theme Expansion is coming soon on this store."
-    static let unavailableMessage = "Theme Expansion isn’t available."
-
-    @Published private(set) var hasThemeExpansion = false
-    @Published private(set) var themeExpansionProduct: Product?
-    @Published private(set) var isProcessing = false
-    @Published var lastError: String?
+    @Published private(set) var hasThemeExpansion = true
     @Published private(set) var customThemes: [CustomTheme] = []
 
-    // New: distribution awareness
-    @Published private(set) var distributor: DistributorType
-    var isAppStoreBuild: Bool { distributor == .appStore }
-    var shouldShowThemeExpansionUpsell: Bool {
-        guard !isForcedUnlocked else { return false }
-        guard isAppStoreBuild else { return false }
-        if let lastError, lastError == Self.unavailableMessage {
-            return false
-        }
-        return true
-    }
-
-    private var updatesTask: Task<Void, Never>?
-    private let isPreviewInstance: Bool
-    private let isForcedUnlocked: Bool
     private let customThemesKey = "ThemeExpansion.CustomThemes"
 
     init(previewUnlocked: Bool = false) {
-        self.isPreviewInstance = previewUnlocked
-        self.isForcedUnlocked = true
-        self.distributor = ThemeExpansionManager.detectDistributor()
-        self.hasThemeExpansion = previewUnlocked || isForcedUnlocked
+        // Always unlocked
+        self.hasThemeExpansion = true
         loadCustomThemes()
 
-        if (previewUnlocked || isForcedUnlocked) && customThemes.isEmpty {
+        if customThemes.isEmpty {
             customThemes = [
                 CustomTheme(name: "Vapor Trail",
                             style: .animatedGradient,
@@ -115,160 +82,22 @@ final class ThemeExpansionManager: ObservableObject {
                             preferredColorScheme: .dark)
             ]
         }
-
-        guard !(previewUnlocked || isForcedUnlocked) else { return }
-
-        // Only wire StoreKit listeners if this is an App Store build
-        if isAppStoreBuild {
-            updatesTask = Task { [weak self] in
-                guard let self else { return }
-                for await result in StoreKit.Transaction.updates {
-                    await self.handle(transactionResult: result)
-                }
-            }
-
-            Task { await refreshEntitlements() }
-        } else {
-            // Non–App Store builds cannot purchase yet; keep everything locked and quiet
-            self.hasThemeExpansion = false
-            self.themeExpansionProduct = nil
-            self.lastError = nil
-        }
-    }
-
-    deinit {
-        updatesTask?.cancel()
-    }
-
-    // MARK: - Public API
-
-    func refreshEntitlements() async {
-        guard !isPreviewInstance else { return }
-        guard !isForcedUnlocked else {
-            hasThemeExpansion = true
-            themeExpansionProduct = nil
-            lastError = nil
-            return
-        }
-        guard isAppStoreBuild else { return } // No-op outside App Store
-
-        isProcessing = true
-        defer { isProcessing = false }
-        do {
-            lastError = nil
-            let products = try await Product.products(for: [Self.productIdentifier])
-            themeExpansionProduct = products.first
-
-            if products.isEmpty {
-                #if targetEnvironment(simulator)
-                lastError = """
-                No products found for.
-                """
-                #else
-                lastError = """
-                No products found for.
-                """
-                #endif
-            }
-
-            // Recompute entitlement from current entitlements
-            hasThemeExpansion = await isEntitledToThemeExpansion()
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
-
-    func restorePurchases() async {
-        guard !isPreviewInstance else { return }
-        guard !isForcedUnlocked else {
-            lastError = nil
-            return
-        }
-        guard isAppStoreBuild else {
-            lastError = Self.comingSoonMessage
-            return
-        }
-        isProcessing = true
-        defer { isProcessing = false }
-        do {
-            lastError = nil
-            try await AppStore.sync()
-            hasThemeExpansion = await isEntitledToThemeExpansion()
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
-
-    func purchaseThemeExpansion() async {
-        guard !isPreviewInstance else { return }
-        guard !isForcedUnlocked else {
-            lastError = nil
-            hasThemeExpansion = true
-            return
-        }
-        guard isAppStoreBuild else {
-            lastError = Self.comingSoonMessage
-            return
-        }
-
-        let product: Product
-        if let cached = themeExpansionProduct {
-            product = cached
-        } else {
-            do {
-                let products = try await Product.products(for: [Self.productIdentifier])
-                if let first = products.first {
-                    themeExpansionProduct = first
-                    product = first
-                } else {
-                    #if targetEnvironment(simulator)
-                    lastError = Self.unavailableMessage
-                    #else
-                    lastError = Self.unavailableMessage
-                    #endif
-                    return
-                }
-            } catch {
-                lastError = error.localizedDescription
-                return
-            }
-        }
-
-        isProcessing = true
-        defer { isProcessing = false }
-
-        do {
-            lastError = nil
-            let result = try await product.purchase()
-            switch result {
-            case .success(let verification):
-                await handle(transactionResult: verification)
-            case .pending:
-                lastError = "Purchase pending. You'll be notified when it's complete."
-            case .userCancelled:
-                break
-            @unknown default:
-                lastError = "Purchase failed due to an unknown error."
-            }
-        } catch {
-            lastError = error.localizedDescription
-        }
     }
 
     func resolvedAccentColor(from hex: String) -> Color {
-        guard hasThemeExpansion, !hex.isEmpty, let custom = Color(hex: hex) else { return .blue }
+        guard !hex.isEmpty, let custom = Color(hex: hex) else { return .blue }
         return custom
     }
 
     func resolvedTheme(from rawValue: String) -> AppTheme {
-        guard let theme = AppTheme(rawValue: rawValue), hasThemeExpansion || theme == .system else {
+        guard let theme = AppTheme(rawValue: rawValue) else {
             return .system
         }
         return theme
     }
 
     func backgroundStyle(for identifier: String) -> BackgroundStyle {
-        if hasThemeExpansion, let custom = customTheme(for: identifier) {
+        if let custom = customTheme(for: identifier) {
             let colors = normalizedColors(from: custom.colorHexes)
             switch custom.style {
             case .staticGradient:
@@ -282,7 +111,7 @@ final class ThemeExpansionManager: ObservableObject {
             }
         }
 
-        if let theme = AppTheme(rawValue: identifier), (hasThemeExpansion || theme == .system) {
+        if let theme = AppTheme(rawValue: identifier) {
             return theme.backgroundStyle
         }
 
@@ -290,10 +119,10 @@ final class ThemeExpansionManager: ObservableObject {
     }
 
     func preferredColorScheme(for identifier: String) -> ColorScheme? {
-        if hasThemeExpansion, let custom = customTheme(for: identifier) {
+        if let custom = customTheme(for: identifier) {
             return custom.preferredColorScheme
         }
-        if let theme = AppTheme(rawValue: identifier), (hasThemeExpansion || theme == .system) {
+        if let theme = AppTheme(rawValue: identifier) {
             return theme.preferredColorScheme
         }
         return nil
@@ -315,7 +144,6 @@ final class ThemeExpansionManager: ObservableObject {
     }
 
     func upsert(customTheme: CustomTheme) {
-        guard hasThemeExpansion || isPreviewInstance else { return }
         var sanitized = customTheme
         sanitized.colorHexes = sanitize(hexes: sanitized.colorHexes)
 
@@ -361,47 +189,6 @@ final class ThemeExpansionManager: ObservableObject {
         if colors.count >= 2 { return colors }
         if let first = colors.first { return [first, first.opacity(0.65)] }
         return [Color.blue, Color.purple]
-    }
-
-    // MARK: - StoreKit plumbing
-
-    private func handle(transactionResult: VerificationResult<StoreKit.Transaction>, finishTransaction: Bool = true) async {
-        switch transactionResult {
-        case .verified(let transaction):
-            if transaction.productID == Self.productIdentifier {
-                hasThemeExpansion = (transaction.revocationDate == nil)
-                lastError = nil
-            }
-            if finishTransaction {
-                await transaction.finish()
-            }
-        case .unverified(_, let error):
-            lastError = error.localizedDescription
-        }
-    }
-
-    private func isEntitledToThemeExpansion() async -> Bool {
-        for await result in Transaction.currentEntitlements {
-            if case .verified(let transaction) = result, transaction.productID == Self.productIdentifier {
-                return transaction.revocationDate == nil
-            }
-        }
-        return false
-    }
-
-    // MARK: - Distributor detection helper
-
-    private static func detectDistributor() -> DistributorType {
-        guard let receiptURL = Bundle.main.appStoreReceiptURL else {
-            return .other
-        }
-        let path = receiptURL.path
-        if FileManager.default.fileExists(atPath: path) {
-            // TestFlight builds use "sandboxReceipt"
-            return receiptURL.lastPathComponent == "sandboxReceipt" ? .testFlight : .appStore
-        } else {
-            return .other
-        }
     }
 }
 

@@ -112,41 +112,6 @@ struct WelcomeSheetView: View {
     }
 }
 
-// MARK: - Helper Functions
-
-func httpGet(_ urlString: String, result: @escaping (String?) -> Void) {
-    guard let url = URL(string: urlString) else { result(nil); return }
-    let task = URLSession.shared.dataTask(with: url) { data, response, error in
-        guard error == nil,
-              let data = data,
-              let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200,
-              let dataString = String(data: data, encoding: .utf8) else {
-            result(nil)
-            return
-        }
-        result(dataString)
-    }
-    task.resume()
-}
-
-func UpdateRetrieval() -> Bool {
-    var ver: String {
-        let marketingVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        return marketingVersion
-    }
-    let urlString = "https://raw.githubusercontent.com/0-Blu/StikJIT/refs/heads/main/version.txt"
-    var res = false
-    httpGet(urlString) { result in
-        if let fc = result {
-            if ver != fc {
-                res = true
-            }
-        }
-    }
-    return res
-}
-
 // MARK: - DNS Checker
 
 class DNSChecker: ObservableObject {
@@ -256,9 +221,6 @@ struct HeartbeatApp: App {
     @AppStorage("customAccentColor") private var customAccentColorHex: String = ""
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @State private var showWelcomeSheet: Bool = false
-    @State private var showVersionAlert = false
-    @State private var versionAlertMessage = ""
-    @State private var versionAlertTitle = ""
     @StateObject private var mount = MountingProgress.shared
     @StateObject private var themeExpansionManager = ThemeExpansionManager()
     @Environment(\.scenePhase) private var scenePhase   // Observe scene lifecycle
@@ -266,7 +228,6 @@ struct HeartbeatApp: App {
     
     init() {
         registerAdvancedOptionsDefault()
-        newVerCheck()
         if let fixMethod  = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.fix_init(forOpeningContentTypes:asCopy:))),
            let origMethod = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.init(forOpeningContentTypes:asCopy:))) {
             method_exchangeImplementations(origMethod, fixMethod)
@@ -285,26 +246,6 @@ struct HeartbeatApp: App {
             color = .systemBlue
         }
         UIView.appearance().tintColor = color
-    }
-    
-    func newVerCheck() {
-        let currentDate = Calendar.current.startOfDay(for: Date())
-        let lastVersionAlertDate = UserDefaults.standard.object(forKey: "VersionUpdateAlert") as? Date ?? Date.distantPast
-
-        if currentDate > Calendar.current.startOfDay(for: lastVersionAlertDate) {
-            if UpdateRetrieval() {
-                let urlString = "https://raw.githubusercontent.com/0-Blu/StikJIT/refs/heads/main/version.txt"
-                httpGet(urlString) { [self] version in
-                    guard let version else { return }
-                    DispatchQueue.main.async {
-                        self.versionAlertTitle = "Update Available!"
-                        self.versionAlertMessage = "Update to version \(version)!"
-                        self.showVersionAlert = true
-                    }
-                }
-            }
-            UserDefaults.standard.set(currentDate, forKey: "VersionUpdateAlert")
-        }
     }
     
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
@@ -339,19 +280,14 @@ struct HeartbeatApp: App {
                                     try await downloadFile(from: item.urlString, to: destinationURL)
                                 } catch {
                                     await MainActor.run {
-                                        versionAlertTitle = "An Error has Occurred"
-                                        versionAlertMessage = "[Download DDI Error]: \(error.localizedDescription)"
-                                        showVersionAlert = true
+                                        showAlert(title: "An Error has Occurred", 
+                                                  message: "[Download DDI Error]: \(error.localizedDescription)", 
+                                                  showOk: true)
                                     }
                                     break
                                 }
                             }
                         }
-                    }
-                    .alert(versionAlertTitle, isPresented: $showVersionAlert) {
-                        Button("OK") { showVersionAlert = false }
-                    } message: {
-                        Text(versionAlertMessage)
                     }
             }
             .themeExpansionManager(themeExpansionManager)

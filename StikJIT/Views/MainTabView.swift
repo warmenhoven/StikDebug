@@ -27,10 +27,6 @@ struct MainTabView: View {
     @State private var detachedTab: TabDescriptor?
     @State private var didSetInitialHome = false
 
-    // Update checking
-    @State private var showForceUpdate: Bool = false
-    @State private var latestVersion: String? = nil
-
     @Environment(\.themeExpansionManager) private var themeExpansion
 
     private var accentColor: Color {
@@ -39,14 +35,6 @@ struct MainTabView: View {
     
     private var preferredScheme: ColorScheme? {
         themeExpansion?.preferredColorScheme(for: appThemeRaw)
-    }
-
-    private var isAppStoreBuild: Bool {
-        #if APPSTORE
-        return true
-        #else
-        return false
-        #endif
     }
 
     private var configurableTabs: [TabDescriptor] {
@@ -63,9 +51,7 @@ struct MainTabView: View {
     }
     
     private var availableTabs: [TabDescriptor] {
-        configurableTabs.filter { descriptor in
-            descriptor.id != "location" || !isAppStoreBuild
-        }
+        configurableTabs
     }
     
     private let settingsTab = TabDescriptor(id: "settings", title: "Settings", systemImage: "gearshape.fill") {
@@ -124,7 +110,6 @@ struct MainTabView: View {
                     }
                     didSetInitialHome = true
                 }
-                checkForUpdate()
                 switchObserver = NotificationCenter.default.addObserver(forName: .switchToTab, object: nil, queue: .main) { note in
                     guard let id = note.object as? String else { return }
                     if selectedTabDescriptors.contains(where: { $0.id == id }) {
@@ -155,94 +140,9 @@ struct MainTabView: View {
                         }
                 }
             }
-
-            if showForceUpdate {
-                ZStack {
-                    Color.black.opacity(0.001).ignoresSafeArea()
-
-                    appGlassCard {
-                        VStack(spacing: 20) {
-                            Text("Update Required")
-                                .font(.title.bold())
-                                .multilineTextAlignment(.center)
-
-                            Text("A new version (\(latestVersion ?? "unknown")) is available. Please update to continue using the app.")
-                                .multilineTextAlignment(.center)
-                                .font(.callout)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal)
-
-                            Button(action: {
-                                let urlString: String
-                                if isAppStoreBuild {
-                                    urlString = "itms-apps://itunes.apple.com/app/id6744045754"
-                                } else {
-                                    urlString = "altstore://source?url=https://StikDebug.xyz/apps.json"
-                                }
-                                if let url = URL(string: urlString) {
-                                    UIApplication.shared.open(url)
-                                }
-                            }) {
-                                Text("Update Now")
-                                    .font(.headline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                            .fill(Color.accentColor)
-                                    )
-                                    .foregroundColor(.white)
-                            }
-                            .padding(.top, 10)
-                        }
-                    }
-                    .padding(.horizontal, 40)
-                }
-                .transition(.opacity.combined(with: .scale))
-                .animation(.easeInOut, value: showForceUpdate)
-            }
         }
     }
 
-    // MARK: - Update Checker
-    private func checkForUpdate() {
-        guard let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String else { return }
-
-        fetchLatestVersion { latest in
-            latestVersion = latest
-            if let latest = latest,
-               latest.compare(currentVersion, options: .numeric) == .orderedDescending {
-                DispatchQueue.main.async {
-                    showForceUpdate = true
-                }
-            }
-        }
-    }
-
-    private func fetchLatestVersion(completion: @escaping (String?) -> Void) {
-        guard let url = URL(string: "https://itunes.apple.com/lookup?id=6744045754") else {
-            completion(nil)
-            return
-        }
-
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            guard let data = data else {
-                completion(nil)
-                return
-            }
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let results = json["results"] as? [[String: Any]],
-                   let appStoreVersion = results.first?["version"] as? String {
-                    completion(appStoreVersion)
-                } else {
-                    completion(nil)
-                }
-            } catch {
-                completion(nil)
-            }
-        }.resume()
-    }
 }
 
 struct MainTabView_Previews: PreviewProvider {

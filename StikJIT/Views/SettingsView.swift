@@ -23,13 +23,6 @@ struct SettingsView: View {
     @Environment(\.themeExpansionManager) private var themeExpansion
     private var backgroundStyle: BackgroundStyle { themeExpansion?.backgroundStyle(for: appThemeRaw) ?? AppTheme.system.backgroundStyle }
     private var preferredScheme: ColorScheme? { themeExpansion?.preferredColorScheme(for: appThemeRaw) }
-    private var isAppStoreBuild: Bool {
-        #if APPSTORE
-        return true
-        #else
-        return false
-        #endif
-    }
     
     @State private var isShowingPairingFilePicker = false
     @State private var showPairingFileMessage = false
@@ -77,10 +70,7 @@ struct SettingsView: View {
         options.append(TabOption(id: "deviceinfo", title: "Device Info", detail: "View detailed device metadata", icon: "iphone.and.arrow.forward", isBeta: false))
         options.append(TabOption(id: "profiles", title: "App Expiry", detail: "Check app expiration date, install/remove profiles", icon: "calendar.badge.clock", isBeta: false))
         options.append(TabOption(id: "processes", title: "Processes", detail: "Inspect running apps", icon: "rectangle.stack.person.crop", isBeta: false))
-        
-        if !isAppStoreBuild {
-            options.append(TabOption(id: "location", title: "Location Sim", detail: "Sideload only", icon: "location", isBeta: false))
-        }
+        options.append(TabOption(id: "location", title: "Location Sim", detail: "Sideload only", icon: "location", isBeta: false))
         return options
     }
 
