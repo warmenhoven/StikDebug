@@ -20,90 +20,6 @@ private func registerAdvancedOptionsDefault() {
     UserDefaults.standard.register(defaults: ["keepAliveLocation": true])
 }
 
-// MARK: - Welcome Sheet
-
-struct WelcomeSheetView: View {
-    var onDismiss: (() -> Void)?
-    @Environment(\.colorScheme) private var colorScheme
-    var body: some View {
-        ZStack {
-            Color.clear.ignoresSafeArea()
-            
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Card container with glassy material and stroke
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Title
-                        Text("Welcome!")
-                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                            .foregroundColor(.primary)
-                            .padding(.top, 8)
-                        
-                        // Intro
-                        Text("Thanks for installing the app. This brief introduction will help you get started.")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.leading)
-                        
-                        // App description
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("On‑device debugger", systemImage: "bolt.shield.fill")
-                                .foregroundColor(.blue)
-                                .font(.headline)
-                            Text("StikDebug is an on‑device debugger designed specifically for self‑developed apps. It helps streamline testing and troubleshooting without sending any data to external servers.")
-                                .font(.callout)
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        
-                        // Continue button
-                        Button(action: { onDismiss?() }) {
-                            Text("Continue")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundColor(.white)
-                                .frame(height: 44)
-                                .frame(maxWidth: .infinity)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(.blue)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(Color.primary.opacity(0.15), lineWidth: 1)
-                                )
-                        }
-                        .padding(.top, 8)
-                        .accessibilityIdentifier("welcome_continue_button")
-                    }
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
-                            )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.15 : 0.08), radius: 12, x: 0, y: 4)
-                    
-                    // Footer version info for consistency
-                    HStack {
-                        Spacer()
-                        Text("iOS \(UIDevice.current.systemVersion)")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-                    .padding(.top, 6)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 30)
-            }
-        }
-    }
-}
-
 // MARK: - DNS Checker
 
 class DNSChecker: ObservableObject {
@@ -209,8 +125,6 @@ private var heartbeatPendingShowUI = true
 
 @main
 struct HeartbeatApp: App {
-    @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
-    @State private var showWelcomeSheet: Bool = false
     @StateObject private var mount = MountingProgress.shared
     @Environment(\.scenePhase) private var scenePhase   // Observe scene lifecycle
     @State private var shouldAttemptHeartbeatRestart = false
@@ -266,20 +180,8 @@ struct HeartbeatApp: App {
                         }
                     }
                 }
-            .onAppear {
-                if !hasLaunchedBefore {
-                    showWelcomeSheet = true
-                }
-            }
             .onChange(of: scenePhase) { newPhase in
                 handleScenePhaseChange(newPhase)
-            }
-            .sheet(isPresented: $showWelcomeSheet) {
-                WelcomeSheetView {
-                    // When the user taps "Continue", mark the app as launched.
-                    hasLaunchedBefore = true
-                    showWelcomeSheet = false
-                }
             }
         }
 
