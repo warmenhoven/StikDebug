@@ -116,7 +116,7 @@ struct ConsoleLogsView: View {
     private var jitLogsPane: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("=== DEVICE INFORMATION ===")
                             .font(.system(size: 11, design: .monospaced))
@@ -396,9 +396,9 @@ struct ConsoleLogsView: View {
     private func loadIdeviceLogsAsync() async {
         guard !isLoadingLogs else { return }
         isLoadingLogs = true
-        
+
         let logPath = URL.documentsDirectory.appendingPathComponent("idevice_log.txt").path
-        
+
         guard FileManager.default.fileExists(atPath: logPath) else {
             await MainActor.run {
                 logManager.addInfoLog("No idevice logs found (Restart the app to continue reading)")
@@ -406,53 +406,55 @@ struct ConsoleLogsView: View {
             }
             return
         }
-        
-        do {
-            let logContent = try String(contentsOfFile: logPath, encoding: .utf8)
-            let lines = logContent.components(separatedBy: .newlines)
-            
-            let maxLines = 500
-            let startIndex = max(0, lines.count - maxLines)
-            let recentLines = Array(lines[startIndex..<lines.count])
-            
-            lastProcessedLineCount = lines.count
-            
-            await MainActor.run {
-                logManager.clearLogs()
-                
+
+        // Do all file I/O and parsing on a background thread
+        let result: ([LogManager.LogEntry], Int)? = await Task.detached(priority: .userInitiated) {
+            do {
+                let logContent = try String(contentsOfFile: logPath, encoding: .utf8)
+                let lines = logContent.components(separatedBy: .newlines)
+
+                let maxLines = 500
+                let startIndex = max(0, lines.count - maxLines)
+                let recentLines = lines[startIndex..<lines.count]
+
+                let skipPrefixes = ["=== DEVICE INFORMATION ===", "Version:", "Name:", "Model:", "=== LOG ENTRIES ==="]
+
+                var parsed: [LogManager.LogEntry] = []
+                parsed.reserveCapacity(recentLines.count)
+
                 for line in recentLines {
                     if line.isEmpty { continue }
-                    
-                    if line.contains("=== DEVICE INFORMATION ===") ||
-                       line.contains("Version:") ||
-                       line.contains("Name:") ||
-                       line.contains("Model:") ||
-                       line.contains("=== LOG ENTRIES ===") {
-                        continue
-                    }
-                    
+                    if skipPrefixes.contains(where: { line.contains($0) }) { continue }
+
+                    let type: LogManager.LogEntry.LogType
                     if line.contains("ERROR") || line.contains("Error") {
-                        logManager.addErrorLog(line)
+                        type = .error
                     } else if line.contains("WARNING") || line.contains("Warning") {
-                        logManager.addWarningLog(line)
+                        type = .warning
                     } else if line.contains("DEBUG") {
-                        logManager.addDebugLog(line)
+                        type = .debug
                     } else {
-                        logManager.addInfoLog(line)
+                        type = .info
                     }
+                    parsed.append(LogManager.LogEntry(timestamp: Date(), type: type, message: line))
                 }
 
+                return (parsed, lines.count)
+            } catch {
+                return nil
+            }
+        }.value
+
+        await MainActor.run {
+            if let (entries, lineCount) = result {
+                lastProcessedLineCount = lineCount
+                logManager.setLogs(entries)
                 if jitIsAtBottom, let last = logManager.logs.last {
                     jitScrollView?.scrollTo(last.id, anchor: .bottom)
                 }
+            } else {
+                logManager.addErrorLog("Failed to read idevice logs")
             }
-        } catch {
-            await MainActor.run {
-                logManager.addErrorLog("Failed to read idevice logs: \(error.localizedDescription)")
-            }
-        }
-        
-        await MainActor.run {
             isLoadingLogs = false
         }
     }
@@ -472,55 +474,63 @@ struct ConsoleLogsView: View {
     private func checkForNewLogs() async {
         guard !isLoadingLogs else { return }
         isLoadingLogs = true
-        
+
         let logPath = URL.documentsDirectory.appendingPathComponent("idevice_log.txt").path
-        
+        let previousCount = lastProcessedLineCount
+
         guard FileManager.default.fileExists(atPath: logPath) else {
             isLoadingLogs = false
             return
         }
-        
-        do {
-            let logContent = try String(contentsOfFile: logPath, encoding: .utf8)
-            let lines = logContent.components(separatedBy: .newlines)
-            
-            if lines.count > lastProcessedLineCount {
-                let newLines = Array(lines[lastProcessedLineCount..<lines.count])
-                lastProcessedLineCount = lines.count
-                
-                await MainActor.run {
-                    for line in newLines {
-                        if line.isEmpty { continue }
-                        
-                        if line.contains("ERROR") || line.contains("Error") {
-                            logManager.addErrorLog(line)
-                        } else if line.contains("WARNING") || line.contains("Warning") {
-                            logManager.addWarningLog(line)
-                        } else if line.contains("DEBUG") {
-                            logManager.addDebugLog(line)
-                        } else {
-                            logManager.addInfoLog(line)
-                        }
-                    }
-                    
-                    let maxLines = 500
-                    if logManager.logs.count > maxLines {
-                        let excessCount = logManager.logs.count - maxLines
-                        logManager.removeOldestLogs(count: excessCount)
-                    }
 
+        // Parse new lines on a background thread
+        let result: ([LogManager.LogEntry], Int)? = await Task.detached(priority: .userInitiated) {
+            do {
+                let logContent = try String(contentsOfFile: logPath, encoding: .utf8)
+                let lines = logContent.components(separatedBy: .newlines)
+
+                guard lines.count > previousCount else { return ([], lines.count) }
+
+                let newLines = lines[previousCount..<lines.count]
+                var parsed: [LogManager.LogEntry] = []
+                parsed.reserveCapacity(newLines.count)
+
+                for line in newLines {
+                    if line.isEmpty { continue }
+
+                    let type: LogManager.LogEntry.LogType
+                    if line.contains("ERROR") || line.contains("Error") {
+                        type = .error
+                    } else if line.contains("WARNING") || line.contains("Warning") {
+                        type = .warning
+                    } else if line.contains("DEBUG") {
+                        type = .debug
+                    } else {
+                        type = .info
+                    }
+                    parsed.append(LogManager.LogEntry(timestamp: Date(), type: type, message: line))
+                }
+
+                return (parsed, lines.count)
+            } catch {
+                return nil
+            }
+        }.value
+
+        await MainActor.run {
+            if let (entries, lineCount) = result {
+                lastProcessedLineCount = lineCount
+                if !entries.isEmpty {
+                    logManager.appendLogs(entries, maxTotal: 500)
                     if jitIsAtBottom, let last = logManager.logs.last {
                         jitScrollView?.scrollTo(last.id, anchor: .bottom)
                     }
                 }
+            } else {
+                logManager.addErrorLog("Failed to read new logs")
             }
-        } catch {
-            await MainActor.run {
-                logManager.addErrorLog("Failed to read new logs: \(error.localizedDescription)")
-            }
+            isLoadingLogs = false
         }
-        
-        isLoadingLogs = false
     }
     
     private func stopLogCheckTimer() {

@@ -25,7 +25,13 @@ final class SystemLogStream: ObservableObject {
             if updateInterval < 0 { updateInterval = 0 }
             flushTimer?.invalidate()
             flushTimer = nil
-            flushImmediatelyIfNeeded()
+            if !isPaused && !pendingEntries.isEmpty {
+                if updateInterval == 0 {
+                    flushAllPending()
+                } else {
+                    scheduleFlushIfNeeded()
+                }
+            }
         }
     }
 
@@ -33,6 +39,8 @@ final class SystemLogStream: ObservableObject {
     private var pendingEntries: [Entry] = []
     private var flushTimer: Timer?
     private var retryTimer: Timer?
+    private var batchTimer: Timer?
+    private static let batchInterval: TimeInterval = 0.1
 
     func start() {
         retryTimer?.invalidate()
@@ -44,6 +52,7 @@ final class SystemLogStream: ObservableObject {
         isStreaming = true
         isPaused = false
         lastError = nil
+        startBatchTimer()
 
         JITEnableContext.shared.startSyslogRelay(handler: { [weak self] line in
             guard let line else { return }
@@ -60,6 +69,8 @@ final class SystemLogStream: ObservableObject {
         JITEnableContext.shared.stopSyslogRelay()
         flushTimer?.invalidate()
         flushTimer = nil
+        batchTimer?.invalidate()
+        batchTimer = nil
         pendingEntries.removeAll()
         retryTimer?.invalidate()
         retryTimer = nil
@@ -88,7 +99,11 @@ final class SystemLogStream: ObservableObject {
     func resume() {
         guard isPaused else { return }
         isPaused = false
-        flushImmediatelyIfNeeded()
+        if updateInterval == 0 {
+            flushAllPending()
+        } else {
+            scheduleFlushIfNeeded()
+        }
     }
 
     private func handleLine(_ line: String) {
@@ -101,9 +116,8 @@ final class SystemLogStream: ObservableObject {
         if pendingEntries.count > maxEntries {
             pendingEntries.removeFirst(pendingEntries.count - maxEntries)
         }
-        if updateInterval == 0 && !isPaused {
-            flushImmediatelyIfNeeded()
-        } else {
+        // Batching is handled by batchTimer / scheduleFlushIfNeeded
+        if updateInterval > 0 {
             scheduleFlushIfNeeded()
         }
     }
@@ -113,8 +127,31 @@ final class SystemLogStream: ObservableObject {
         isPaused = false
         flushTimer?.invalidate()
         flushTimer = nil
+        batchTimer?.invalidate()
+        batchTimer = nil
         lastError = error?.localizedDescription ?? "System log stream stopped"
         scheduleAutoRetry()
+    }
+
+    private func startBatchTimer() {
+        batchTimer?.invalidate()
+        batchTimer = Timer.scheduledTimer(withTimeInterval: Self.batchInterval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            guard !self.isPaused, self.updateInterval == 0, !self.pendingEntries.isEmpty else { return }
+            self.flushAllPending()
+        }
+        if let batchTimer {
+            RunLoop.main.add(batchTimer, forMode: .common)
+        }
+    }
+
+    private func flushAllPending() {
+        guard !pendingEntries.isEmpty else { return }
+        entries.append(contentsOf: pendingEntries)
+        pendingEntries.removeAll()
+        if entries.count > maxEntries {
+            entries.removeFirst(entries.count - maxEntries)
+        }
     }
 
     private func prettify(line: String) -> String {
@@ -131,32 +168,12 @@ final class SystemLogStream: ObservableObject {
             .joined(separator: "\n")
     }
 
-    private func appendEntry(_ entry: Entry) {
-        entries.append(entry)
-        if entries.count > maxEntries {
-            entries.removeFirst(entries.count - maxEntries)
-        }
-    }
-
-    private func flushImmediatelyIfNeeded() {
-        guard !isPaused else { return }
-        if updateInterval == 0 {
-            while !pendingEntries.isEmpty {
-                let next = pendingEntries.removeFirst()
-                appendEntry(next)
-            }
-        } else {
-            scheduleFlushIfNeeded()
-        }
-    }
-
     private func scheduleFlushIfNeeded() {
         guard !isPaused else { return }
         guard !pendingEntries.isEmpty else { return }
         guard flushTimer == nil else { return }
-
-        if updateInterval <= 0 {
-            flushImmediatelyIfNeeded()
+        guard updateInterval > 0 else {
+            // Live mode uses batchTimer instead
             return
         }
 
@@ -164,10 +181,7 @@ final class SystemLogStream: ObservableObject {
             guard let self else { return }
             self.flushTimer = nil
             guard !self.isPaused else { return }
-            if let next = self.pendingEntries.first {
-                self.pendingEntries.removeFirst()
-                self.appendEntry(next)
-            }
+            self.flushAllPending()
             if !self.pendingEntries.isEmpty {
                 self.scheduleFlushIfNeeded()
             }
