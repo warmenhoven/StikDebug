@@ -63,15 +63,20 @@ struct HomeView: View {
                         // Refresh heartbeat
                         pubHeartBeat = false
                         startHeartbeatInBackground()
-                        
-                        // Got a pairing file, show apps
-                        if !mounting.coolisMounted {
+
+                        // Got a pairing file, check mount status
+                        let mountStatus = checkMountStatus()
+                        if mountStatus == .notMounted {
                             showAlert(title: "Device Not Mounted", message: "The Developer Disk Image has not been mounted yet. Check in settings for more information.", showOk: true) { cool in
                                 // No Need
                             }
                             return
+                        } else if mountStatus == .unreachable {
+                            // Don't show a separate error here — the heartbeat
+                            // will fail and show its own connectivity error.
+                            return
                         }
-                        
+
                         isShowingInstalledApps = true
                         
                     } else {

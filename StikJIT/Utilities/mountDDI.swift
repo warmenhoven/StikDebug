@@ -18,12 +18,22 @@ func progressCallback(progress: size_t, total: size_t, context: UnsafeMutableRaw
     MountingProgress.shared.progressCallback(progress: progress, total: total, context: context)
 }
 
+enum MountCheckResult {
+    case mounted
+    case notMounted
+    case unreachable
+}
+
 func isMounted() -> Bool {
+    return checkMountStatus() == .mounted
+}
+
+func checkMountStatus() -> MountCheckResult {
     do {
         let result = try JITEnableContext.shared.getMountedDeviceCount()
-        return result > 0
+        return result > 0 ? .mounted : .notMounted
     } catch {
-        return false
+        return .unreachable
     }
 }
 
