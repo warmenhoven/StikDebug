@@ -198,9 +198,9 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-                        .fileImporter(
+            .fileImporter(
             isPresented: $isShowingPairingFilePicker,
-            allowedContentTypes: [UTType(filenameExtension: "mobiledevicepairing", conformingTo: .data)!, .propertyList],
+            allowedContentTypes: [UTType(filenameExtension: "mobiledevicepairing", conformingTo: .data)!, UTType(filenameExtension: "mobiledevicepair", conformingTo: .data)!, .propertyList],
             allowsMultipleSelection: false
         ) { result in
             switch result {
