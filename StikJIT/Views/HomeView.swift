@@ -61,6 +61,10 @@ struct HomeView: View {
                     
                     
                     if pairingFileExists {
+                        // Refresh heartbeat
+                        pubHeartBeat = false
+                        startHeartbeatInBackground()
+                        
                         // Got a pairing file, show apps
                         if !mounting.coolisMounted {
                             showAlert(title: "Device Not Mounted", message: "The Developer Disk Image has not been mounted yet. Check in settings for more information.", showOk: true) { cool in
