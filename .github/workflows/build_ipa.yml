@@ -58,12 +58,18 @@ jobs:
           path: StikDebug.ipa
           retention-days: 90
 
-      - name: Create or Update GitHub Release (GitHub-Alpha)
+      - name: Read app version
+        id: version
+        run: |
+          VERSION=$(sed -n 's/.*MARKETING_VERSION = \(.*\);/\1/p' StikDebug.xcodeproj/project.pbxproj | head -1 | xargs)
+          echo "app_version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create or Update GitHub Release (Nightly)
         if: env.UPLOAD_IPA == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: GitHub-Alpha
-          name: GitHub-Alpha
+          tag_name: Nightly
+          name: "Nightly - v${{ steps.version.outputs.app_version }}"
           prerelease: true
           generate_release_notes: false
           target_commitish: ${{ github.sha }}
