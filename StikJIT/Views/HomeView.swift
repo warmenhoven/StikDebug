@@ -8,6 +8,13 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct JITEnableConfiguration {
+    var bundleID: String? = nil
+    var pid : Int? = nil
+    var scriptData: Data? = nil
+    var scriptName : String? = nil
+}
+
 struct HomeView: View {
 
     @AppStorage("username") private var username = "User"
@@ -24,7 +31,7 @@ struct HomeView: View {
     @State private var importProgress: Float = 0.0
     
     @State private var viewDidAppeared = false
-    @State private var pendingBundleIdToEnableJIT : String? = nil
+    @State private var pendingJITEnableConfiguration : JITEnableConfiguration? = nil
     
     @State var scriptViewShow = false
     @State private var isShowingConsole = false
@@ -248,30 +255,56 @@ struct HomeView: View {
                 bundleID = selectedBundle
                 isShowingInstalledApps = false
                 HapticFeedbackHelper.trigger()
-                startJITInBackground(with: selectedBundle)
+                startJITInBackground(bundleID: selectedBundle)
             }
         }
         .onOpenURL { url in
-            print(url.path())
-            if url.host() != "enable-jit" {
-                return
-            }
-            
+            guard let host = url.host() else { return }
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            if let bundleId = components?.queryItems?.first(where: { $0.name == "bundle-id" })?.value {
-                if viewDidAppeared {
-                    startJITInBackground(with: bundleId)
-                } else {
-                    pendingBundleIdToEnableJIT = bundleId
+            switch host {
+            case "enable-jit":
+                var config = JITEnableConfiguration()
+                if let pidStr = components?.queryItems?.first(where: { $0.name == "pid" })?.value, let pid = Int(pidStr) {
+                    config.pid = pid
                 }
+                if let bundleId = components?.queryItems?.first(where: { $0.name == "bundle-id" })?.value {
+                    config.bundleID = bundleId
+                }
+                if let scriptBase64URL = components?.queryItems?.first(where: { $0.name == "script-data" })?.value?.removingPercentEncoding {
+                    let base64 = base64URLToBase64(scriptBase64URL)
+                    if let scriptData = Data(base64Encoded: base64) {
+                        config.scriptData = scriptData
+                    }
+                }
+                if let scriptName = components?.queryItems?.first(where: { $0.name == "script-name" })?.value {
+                    config.scriptName = scriptName
+                }
+                if config.scriptData == nil, let bundleID = config.bundleID,
+                   let scriptInfo = preferredScript(for: bundleID) {
+                    config.scriptData = scriptInfo.data
+                    config.scriptName = scriptInfo.name
+                }
+                if viewDidAppeared {
+                    startJITInBackground(bundleID: config.bundleID, pid: config.pid, scriptData: config.scriptData, scriptName: config.scriptName, triggeredByURLScheme: true)
+                } else {
+                    pendingJITEnableConfiguration = config
+                }
+            case "launch-app":
+                if let bundleId = components?.queryItems?.first(where: { $0.name == "bundle-id" })?.value {
+                    HapticFeedbackHelper.trigger()
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let _ = JITEnableContext.shared.launchAppWithoutDebug(bundleId, logger: nil)
+                    }
+                }
+            default:
+                break
             }
-            
         }
         .onAppear() {
             viewDidAppeared = true
-            if let pendingBundleIdToEnableJIT {
-                startJITInBackground(with: pendingBundleIdToEnableJIT)
-                self.pendingBundleIdToEnableJIT = nil
+            if let config = pendingJITEnableConfiguration {
+                startJITInBackground(bundleID: config.bundleID, pid: config.pid, scriptData: config.scriptData, scriptName: config.scriptName, triggeredByURLScheme: true)
+                pendingJITEnableConfiguration = nil
             }
         }
         .sheet(isPresented: $isShowingConsole) {
@@ -389,43 +422,62 @@ struct HomeView: View {
         pairingFileExists = FileManager.default.fileExists(atPath: URL.documentsDirectory.appendingPathComponent("pairingFile.plist").path)
     }
     
-    private func startJITInBackground(with bundleID: String) {
+    private func startJITInBackground(bundleID: String? = nil, pid: Int? = nil, scriptData: Data? = nil, scriptName: String? = nil, triggeredByURLScheme: Bool = false) {
         isProcessing = true
-        LogManager.shared.addInfoLog("Starting JIT for \(bundleID)")
-        
+        LogManager.shared.addInfoLog("Starting Debug for \(bundleID ?? String(pid ?? 0))")
+
         DispatchQueue.global(qos: .background).async {
             let finishProcessing = {
                 DispatchQueue.main.async {
                     isProcessing = false
                 }
             }
-            
-            var scriptData: Data? = nil
-            var scriptName: String? = nil
-            
-            if let preferred = preferredScript(for: bundleID) {
+
+            var scriptData = scriptData
+            var scriptName = scriptName
+            if scriptData == nil,
+               let bundleID,
+               let preferred = preferredScript(for: bundleID) {
                 scriptName = preferred.name
                 scriptData = preferred.data
             }
-            
+
             var callback: DebugAppCallback? = nil
             if ProcessInfo.processInfo.hasTXM, let sd = scriptData {
-                callback = getJsCallback(sd, name: scriptName ?? bundleID)
+                callback = getJsCallback(sd, name: scriptName ?? bundleID ?? "Script")
             }
 
             let logger: LogFunc = { message in if let message { LogManager.shared.addInfoLog(message) } }
-            
-            let success = JITEnableContext.shared.debugApp(withBundleID: bundleID, logger: logger, jsCallback: callback)
-            
-            DispatchQueue.main.async {
-                LogManager.shared.addInfoLog("JIT process completed for \(bundleID)")
-                
-                if success && doAutoQuitAfterEnablingJIT {
-                    exit(0)
+            var success: Bool
+            if let pid {
+                success = JITEnableContext.shared.debugApp(withPID: Int32(pid), logger: logger, jsCallback: callback)
+            } else if let bundleID {
+                success = JITEnableContext.shared.debugApp(withBundleID: bundleID, logger: logger, jsCallback: callback)
+            } else {
+                DispatchQueue.main.async {
+                    showAlert(title: "Failed to Debug App".localized, message: "Either bundle ID or PID should be specified.".localized, showOk: true)
+                }
+                success = false
+            }
+
+            if success {
+                DispatchQueue.main.async {
+                    LogManager.shared.addInfoLog("Debug process completed for \(bundleID ?? String(pid ?? 0))")
+
+                    if doAutoQuitAfterEnablingJIT {
+                        exit(0)
+                    }
                 }
             }
             finishProcessing()
         }
+    }
+
+    private func base64URLToBase64(_ base64url: String) -> String {
+        var base64 = base64url.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        let pad = 4 - (base64.count % 4)
+        if pad < 4 { base64 += String(repeating: "=", count: pad) }
+        return base64
     }
 }
 
