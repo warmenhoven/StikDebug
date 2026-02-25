@@ -151,7 +151,7 @@ To propose a new feature, open a feature request issue and provide:
 - The problem it solves or the use case it addresses
 - Any relevant examples or implementation ideas
 
-### Code Contributions
+### Code Contributions (Best Practices)
 - Follow normal Swift and SwiftUI style.
 - Write clear and easy to understand code.
 - Keep your changes consistent with how the project is already set up.
