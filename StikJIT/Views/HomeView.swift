@@ -449,6 +449,7 @@ struct HomeView: View {
     private func startJITInBackground(bundleID: String? = nil, pid: Int? = nil, scriptData: Data? = nil, scriptName: String? = nil, triggeredByURLScheme: Bool = false) {
         isProcessing = true
         LogManager.shared.addInfoLog("Starting Debug for \(bundleID ?? String(pid ?? 0))")
+        BackgroundLocationManager.shared.requestStart()
 
         if triggeredByURLScheme {
             pubHeartBeat = false
@@ -463,6 +464,7 @@ struct HomeView: View {
             let finishProcessing = {
                 DispatchQueue.main.async {
                     isProcessing = false
+                    BackgroundLocationManager.shared.requestStop()
                 }
             }
 

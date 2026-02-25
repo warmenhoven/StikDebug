@@ -117,18 +117,16 @@ struct SettingsView: View {
                     Toggle(isOn: $keepAliveLocation) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Background Location")
-                            Text("Uses low-accuracy location to stay alive even when another app plays audio.")
+                            Text("Uses low-accuracy location to stay alive when an activity needs it.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .onChange(of: keepAliveLocation) { _, enabled in
-                        if enabled { BackgroundLocationManager.shared.start() }
-                        else { BackgroundLocationManager.shared.stop() }
+                        if !enabled { BackgroundLocationManager.shared.stop() }
                     }
+
                 } header: {
                     Text("Background Keep-Alive")
-                } footer: {
-                    Text("For Background Location to work reliably, go to **Settings → Privacy & Security → Location Services → StikDebug** and select **Always**.")
                 }
 
                 // 6) Behavior

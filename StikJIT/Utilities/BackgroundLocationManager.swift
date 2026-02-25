@@ -10,6 +10,7 @@ final class BackgroundLocationManager: NSObject, CLLocationManagerDelegate {
 
     private let locationManager = CLLocationManager()
     private var isRunning = false
+    private var activityCount = 0
 
     private override init() {
         super.init()
@@ -37,6 +38,20 @@ final class BackgroundLocationManager: NSObject, CLLocationManagerDelegate {
     func stop() {
         isRunning = false
         locationManager.stopUpdatingLocation()
+    }
+
+    func requestStart() {
+        activityCount += 1
+        if activityCount == 1, UserDefaults.standard.bool(forKey: "keepAliveLocation") {
+            start()
+        }
+    }
+
+    func requestStop() {
+        activityCount = max(activityCount - 1, 0)
+        if activityCount == 0 {
+            stop()
+        }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

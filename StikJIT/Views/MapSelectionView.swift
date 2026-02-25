@@ -195,6 +195,9 @@ struct LocationSimulationView: View {
         }
         .onDisappear {
             stopResendLoop()
+            if backgroundTaskID != .invalid {
+                BackgroundLocationManager.shared.requestStop()
+            }
             endBackgroundTask()
         }
     }
@@ -225,6 +228,7 @@ struct LocationSimulationView: View {
                 if code == 0 {
                     beginBackgroundTask()
                     startResendLoop()
+                    BackgroundLocationManager.shared.requestStart()
                 } else {
                     alertTitle = "Simulation Failed"
                     alertMessage = "Could not simulate location (error \(code)). Make sure the device is connected and the DDI is mounted."
@@ -245,6 +249,7 @@ struct LocationSimulationView: View {
                 if code == 0 {
                     coordinate = nil
                     endBackgroundTask()
+                    BackgroundLocationManager.shared.requestStop()
                 } else {
                     alertTitle = "Clear Failed"
                     alertMessage = "Could not clear simulated location (error \(code))."

@@ -134,9 +134,6 @@ struct HeartbeatApp: App {
         if UserDefaults.standard.bool(forKey: "keepAliveAudio") {
             BackgroundAudioManager.shared.start()
         }
-        if UserDefaults.standard.bool(forKey: "keepAliveLocation") {
-            BackgroundLocationManager.shared.start()
-        }
         if let fixMethod  = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.fix_init(forOpeningContentTypes:asCopy:))),
            let origMethod = class_getInstanceMethod(UIDocumentPickerViewController.self, #selector(UIDocumentPickerViewController.init(forOpeningContentTypes:asCopy:))) {
             method_exchangeImplementations(origMethod, fixMethod)
