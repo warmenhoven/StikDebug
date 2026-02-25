@@ -205,10 +205,8 @@ struct HomeView: View {
                             pairingFileExists = true
                         }
                         
-                        // Start heartbeat in background
                         startHeartbeatInBackground()
                         
-                        // Create timer to update progress instead of sleeping
                         let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
                             DispatchQueue.main.async {
                                 if importProgress < 1.0 {
@@ -426,7 +424,16 @@ struct HomeView: View {
         isProcessing = true
         LogManager.shared.addInfoLog("Starting Debug for \(bundleID ?? String(pid ?? 0))")
 
+        if triggeredByURLScheme {
+            pubHeartBeat = false
+            startHeartbeatInBackground(showErrorUI: false)
+        }
+
         DispatchQueue.global(qos: .background).async {
+
+            if triggeredByURLScheme {
+                sleep(1)
+            }
             let finishProcessing = {
                 DispatchQueue.main.async {
                     isProcessing = false
