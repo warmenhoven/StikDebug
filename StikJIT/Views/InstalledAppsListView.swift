@@ -195,6 +195,15 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
                         ToolbarItem(placement: .navigationBarTrailing) {
                             Button("Done") { dismiss() }.fontWeight(.semibold)
                         }
+                    } else {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
+                                viewModel.refreshAppLists()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .disabled(viewModel.isLoading)
+                        }
                     }
                 }
                 .onAppear {
@@ -233,6 +242,9 @@ private enum AppListTab: Int, CaseIterable, Identifiable {
         }
         .onChange(of: selectedTab) { _, _ in prefetchPriorityIcons() }
         .onChange(of: pinnedSystemApps) { _, _ in prefetchPriorityIcons() }
+        .onReceive(NotificationCenter.default.publisher(for: .pairingFileImported)) { _ in
+            viewModel.refreshAppLists()
+        }
     }
 
     // MARK: Apps List

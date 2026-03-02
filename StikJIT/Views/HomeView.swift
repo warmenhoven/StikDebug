@@ -133,7 +133,16 @@ struct HomeView: View {
                             try fileManager.removeItem(at: dest)
                         }
                         try fileManager.copyItem(at: url, to: dest)
+                        pubHeartBeat = false
                         startHeartbeatInBackground()
+                        NotificationCenter.default.post(name: .pairingFileImported, object: nil)
+                        // Dismiss any existing heartbeat error alert
+                        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let root = scene.windows.first?.rootViewController {
+                            var top = root
+                            while let presented = top.presentedViewController { top = presented }
+                            if top is UIAlertController { top.dismiss(animated: true) }
+                        }
                     } catch {
                         print("Error copying pairing file: \(error)")
                     }
