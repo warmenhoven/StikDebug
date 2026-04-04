@@ -207,6 +207,7 @@ typedef struct Vec_u64 Vec_u64;
 
 typedef struct IdeviceFfiError {
   int32_t code;
+  int32_t sub_code;
   const char *message;
 } IdeviceFfiError;
 
@@ -4092,6 +4093,79 @@ struct IdeviceFfiError *image_mounter_mount_personalized(struct ImageMounterHand
                                                          size_t build_manifest_len,
                                                          const void *info_plist,
                                                          uint64_t unique_chip_id);
+
+/**
+ * Mounts a personalized developer image via RSD
+ *
+ * # Arguments
+ * * [`client`] - A valid ImageMounter handle
+ * * [`provider`] - An adapter handle
+ * * [`handshake`] - An RSD handshake handle
+ * * [`image`] - Pointer to the image data
+ * * [`image_len`] - Length of the image data
+ * * [`trust_cache`] - Pointer to the trust cache data
+ * * [`trust_cache_len`] - Length of the trust cache data
+ * * [`build_manifest`] - Pointer to the build manifest data
+ * * [`build_manifest_len`] - Length of the build manifest data
+ * * [`info_plist`] - Pointer to info plist (optional)
+ * * [`unique_chip_id`] - The device's unique chip ID
+ *
+ * # Returns
+ * An IdeviceFfiError on error, null on success
+ *
+ * All pointers must be valid (except optional ones which can be null)
+ */
+struct IdeviceFfiError *image_mounter_mount_personalized_rsd(struct ImageMounterHandle *client,
+                                                             struct AdapterHandle *provider,
+                                                             struct RsdHandshakeHandle *handshake,
+                                                             const uint8_t *image,
+                                                             size_t image_len,
+                                                             const uint8_t *trust_cache,
+                                                             size_t trust_cache_len,
+                                                             const uint8_t *build_manifest,
+                                                             size_t build_manifest_len,
+                                                             const void *info_plist,
+                                                             uint64_t unique_chip_id);
+
+/**
+ * Mounts a personalized developer image via RSD with progress callback
+ *
+ * # Arguments
+ * * [`client`] - A valid ImageMounter handle
+ * * [`provider`] - An adapter handle
+ * * [`handshake`] - An RSD handshake handle
+ * * [`image`] - Pointer to the image data
+ * * [`image_len`] - Length of the image data
+ * * [`trust_cache`] - Pointer to the trust cache data
+ * * [`trust_cache_len`] - Length of the trust cache data
+ * * [`build_manifest`] - Pointer to the build manifest data
+ * * [`build_manifest_len`] - Length of the build manifest data
+ * * [`info_plist`] - Pointer to info plist (optional)
+ * * [`unique_chip_id`] - The device's unique chip ID
+ * * [`callback`] - Progress callback function
+ * * [`context`] - User context to pass to callback
+ *
+ * # Returns
+ * An IdeviceFfiError on error, null on success
+ *
+ * # Safety
+ * All pointers must be valid (except optional ones which can be null)
+ */
+struct IdeviceFfiError *image_mounter_mount_personalized_with_callback_rsd(struct ImageMounterHandle *client,
+                                                                           struct AdapterHandle *provider,
+                                                                           struct RsdHandshakeHandle *handshake,
+                                                                           const uint8_t *image,
+                                                                           size_t image_len,
+                                                                           const uint8_t *trust_cache,
+                                                                           size_t trust_cache_len,
+                                                                           const uint8_t *build_manifest,
+                                                                           size_t build_manifest_len,
+                                                                           const void *info_plist,
+                                                                           uint64_t unique_chip_id,
+                                                                           void (*callback)(size_t progress,
+                                                                                            size_t total,
+                                                                                            void *context),
+                                                                           void *context);
 
 /**
  * Mounts a personalized developer image with progress callback
